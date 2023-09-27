@@ -15,9 +15,11 @@
 package auditlog
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -67,13 +69,53 @@ func initServer(t *testing.T, name string, cfg Config) (server *httptest.Server,
 		w.Header().Set("testh1", "testh1value")
 		w.Header().Add("testh1", "testh1value2")
 		w.Header().Set("Content-Type", rpc.MIMEJSON)
-		w.WriteHeader(http.StatusOK)
+		w.Header()["ETag"] = []string{"etag value"}
+
+		extraHeader := ExtraHeader(w)
+		extraHeader.Set("extra-header1", "header1 value")
+		extraHeader.Set("Extra-header2", "header2 value")
+		extraHeader.Add("Extra-header2", "header2 value2")
+
 		data, err := json.Marshal(testRespData{Result: "success"})
 		require.NoError(t, err)
 		w.Write(data)
+
+		rw := w.(*responseWriter)
+		if !rw.no2xxBody && rw.bodyLimit > 0 {
+			require.Equal(t, len(data), rw.n)
+			require.Equal(t, data, rw.body[:rw.n])
+		} else {
+			require.Equal(t, 0, rw.n)
+		}
+	}
+
+	streamHandler := func(w http.ResponseWriter, req *http.Request) {
+		size := int64(64 * 1024)
+		buffer := make([]byte, size)
+		for range [1024]struct{}{} {
+			_, err := io.CopyN(w, bytes.NewReader(buffer), size)
+			require.NoError(t, err)
+		}
+
+		span := trace.SpanFromContextSafe(req.Context())
+		span.SetTag("response", "readfrom")
+		span.AppendRPCTrackLog([]string{"stream"})
+
+		rw := w.(*responseWriter)
+		require.Equal(t, 0, rw.n)
+		require.Equal(t, 1024*size, rw.bodyWritten)
 	}
 	entryHandler := func(w http.ResponseWriter, req *http.Request) {
-		ah.Handler(w, req, bussinessHandler)
+		switch req.URL.Path {
+		case "/":
+			ah.Handler(w, req, bussinessHandler)
+		case "/stream":
+			ah.Handler(w, req, streamHandler)
+		case "/error-response":
+			ah.Handler(w, req, errorResponseHandler)
+		default:
+			w.WriteHeader(http.StatusNotImplemented)
+		}
 	}
 
 	server = httptest.NewServer(http.HandlerFunc(entryHandler))
@@ -199,6 +241,72 @@ func TestNoContentLength(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "{\"test1\":\"test1value\"}", respData.Result)
 	resp.Body.Close()
+}
+
+func TestNoLogBody(t *testing.T) {
+	cfg := Config{
+		No2xxBody: true,
+	}
+	server, tmpDir, lc := initServer(t, "testNoLogBody", cfg)
+	defer func() {
+		server.Close()
+		os.RemoveAll(tmpDir)
+		lc.Close()
+	}()
+
+	url := server.URL
+	client := http.DefaultClient
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	b, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+	respData := &testRespData{}
+	err = json.Unmarshal(b, respData)
+	require.NoError(t, err)
+	require.Equal(t, "success", respData.Result)
+	resp.Body.Close()
+
+	req, err = http.NewRequest(http.MethodPut, url+"/error-response", nil)
+	require.NoError(t, err)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	b, err = ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+	respData2 := &testErrorRespData{}
+	err = xml.Unmarshal(b, respData2)
+	require.NoError(t, err)
+	require.Equal(t, "ErrorTestResponseCode", respData2.Code)
+	resp.Body.Close()
+
+	open, err := os.Open(tmpDir)
+	require.NoError(t, err)
+	dirEntries, err := open.ReadDir(-1)
+	require.NoError(t, err)
+	require.Greater(t, len(dirEntries), 0)
+	require.NoError(t, open.Close())
+}
+
+func TestResponseReadFrom(t *testing.T) {
+	server, tmpDir, lc := initServer(t, "testResponseReadFrom", Config{LogFormat: LogFormatJSON})
+	defer func() {
+		server.Close()
+		os.RemoveAll(tmpDir)
+		lc.Close()
+	}()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/stream", nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	_, err = io.Copy(io.Discard, resp.Body)
+	require.NoError(t, err)
 }
 
 func TestBodylimit(t *testing.T) {
