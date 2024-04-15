@@ -2475,4 +2475,5 @@ func (i *Inode) UpdateHybridCloudParams(paramIno *Inode) {
 	i.HybridCouldExtentsMigration.storageClass = paramIno.HybridCouldExtentsMigration.storageClass
 	i.HybridCouldExtentsMigration.sortedEks = paramIno.HybridCouldExtentsMigration.sortedEks
 	i.HybridCouldExtentsMigration.expiredTime = paramIno.HybridCouldExtentsMigration.expiredTime
+	i.Type = paramIno.Type
 }
