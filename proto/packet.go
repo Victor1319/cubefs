@@ -287,6 +287,10 @@ func NewPacketReqID() *Packet {
 	return p
 }
 
+func (p *Packet) CostUs() int {
+	return (time.Now().Nanosecond() - int(p.StartT)) / 1e3
+}
+
 func (p *Packet) GetCopy() *Packet {
 	newPacket := NewPacket()
 	newPacket.ReqID = p.ReqID

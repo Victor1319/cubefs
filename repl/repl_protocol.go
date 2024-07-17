@@ -25,6 +25,7 @@ import (
 
 	"github.com/cubefs/cubefs/proto"
 	"github.com/cubefs/cubefs/util"
+	"github.com/cubefs/cubefs/util/exporter"
 	"github.com/cubefs/cubefs/util/log"
 )
 
@@ -289,9 +290,14 @@ func (rp *ReplProtocol) hasError() bool {
 
 func (rp *ReplProtocol) readPkgAndPrepare() (err error) {
 	request := NewPacket()
+	beg := time.Now()
 	if err = request.ReadFromConnFromCli(rp.sourceConn, proto.NoReadDeadlineTime); err != nil {
 		return
 	}
+	if request.IsReadOperation() {
+		exporter.Recoder.WithLabelValues("data_read_conn").Observe(float64(time.Since(beg).Microseconds()))
+	}
+
 	log.LogDebugf("action[readPkgAndPrepare] packet(%v) from remote(%v) ",
 		request.GetUniqueLogId(), rp.sourceConn.RemoteAddr().String())
 	if err = request.resolveFollowersAddr(); err != nil {
