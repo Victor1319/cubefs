@@ -49,6 +49,7 @@ type Packet struct {
 	// used locally
 	shallDegrade bool
 	AfterPre     bool
+	Beg          time.Time
 }
 
 type FollowerPacket struct {

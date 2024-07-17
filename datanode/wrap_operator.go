@@ -116,13 +116,21 @@ func (s *DataNode) OperatePacket(p *repl.Packet, c net.Conn) (err error) {
 			}
 		}
 		p.Size = resultSize
+		if p.IsReadOperation() {
+			now := time.Now()
+			c1 := time.Since(p.Beg).Microseconds()
+			c2 := p.CostUs()
+			c3 := (now.Nanosecond() - int(start)) / 1e3
+
+			exporter.Recoder.WithLabelValues("data_total_cost_beg").Observe(float64(c1))
+			exporter.Recoder.WithLabelValues("data_total_cost").Observe(float64(c2))
+			exporter.Recoder.WithLabelValues("data_read_cost").Observe(float64(c3))
+			cost := time.Since(now).Microseconds()
+			exporter.Recoder.WithLabelValues("data_coll_cost").Observe(float64(cost))
+		}
+
 		if !shallDegrade {
 			tpObject.SetWithLabels(err, tpLabels)
-			if p.IsReadOperation() {
-				exporter.Recoder.WithLabelValues("data_total_cost").Observe(float64(p.CostUs()))
-				cost := (time.Now().Nanosecond() - int(start)) / 1e3
-				exporter.Recoder.WithLabelValues("data_read_cost").Observe(float64(cost))
-			}
 		}
 	}()
 	switch p.Opcode {

@@ -288,6 +288,10 @@ func NewPacketReqID() *Packet {
 }
 
 func (p *Packet) CostUs() int {
+	if p.ReqID > 1720085785176839 && p.ReqID < 1821185785176839{
+		return  int(time.Now().UnixMicro() - p.ReqID)
+	}
+
 	return (time.Now().Nanosecond() - int(p.StartT)) / 1e3
 }
 

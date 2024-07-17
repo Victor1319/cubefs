@@ -17,6 +17,7 @@ package repl
 import (
 	"container/list"
 	"fmt"
+	"hash/crc32"
 	"net"
 	"sync"
 
@@ -290,16 +291,25 @@ func (rp *ReplProtocol) hasError() bool {
 
 func (rp *ReplProtocol) readPkgAndPrepare() (err error) {
 	request := NewPacket()
-	beg := time.Now()
 	if err = request.ReadFromConnFromCli(rp.sourceConn, proto.NoReadDeadlineTime); err != nil {
 		return
 	}
+	request.Beg = time.Now()
+	cost := request.CostUs()
 	if request.IsReadOperation() {
-		exporter.Recoder.WithLabelValues("data_read_conn").Observe(float64(time.Since(beg).Microseconds()))
+		exporter.Recoder.WithLabelValues("data_read_conn").Observe(float64(cost))
 	}
 
-	log.LogDebugf("action[readPkgAndPrepare] packet(%v) from remote(%v) ",
-		request.GetUniqueLogId(), rp.sourceConn.RemoteAddr().String())
+	if request.IsReadOperation() {
+		rp.writeDataBack(request)
+		err = rp.putResponse(request)
+		return
+	}
+
+	if log.EnableDebug() {
+		log.LogDebugf("action[readPkgAndPrepare] packet(%v) from remote(%v) ",
+			request.GetUniqueLogId(), rp.sourceConn.RemoteAddr().String())
+	}
 	if err = request.resolveFollowersAddr(); err != nil {
 		err = rp.putResponse(request)
 		return
@@ -309,9 +319,44 @@ func (rp *ReplProtocol) readPkgAndPrepare() (err error) {
 		return
 	}
 
+	if request.IsReadOperation() {
+		rp.operatorFunc(request, rp.sourceConn)
+		err = rp.putResponse(request)
+		return
+	}
+
 	err = rp.putToBeProcess(request)
 
 	return
+}
+
+var data = make([]byte, 1024*128)
+
+func init() {
+	for i := range data {
+		data[i] = byte(i % 256)
+	}
+}
+
+func (rp *ReplProtocol) writeDataBack(p *Packet) (err error) {
+	start := time.Now()
+	p.AfterPre = true
+	reply := NewStreamReadResponsePacket(p.ReqID, p.PartitionID, p.ExtentID)
+	reply.StartT = p.StartT
+	reply.Data = data[:p.Size]
+	crc := crc32.ChecksumIEEE(reply.Data)
+	reply.CRC = crc
+	reply.ExtentOffset = p.ExtentOffset
+	reply.Size = p.Size
+	reply.ResultCode = proto.OpOk
+	err = reply.WriteToConn(rp.sourceConn)
+	if err != nil {
+		p.PackErrorBody("ActionStreamRead", err.Error())
+		p.WriteToConn(rp.sourceConn)
+		return
+	}
+	exporter.Recoder.WithLabelValues("data_writeDataBack").Observe(float64(time.Since(start).Microseconds()))
+	return nil
 }
 
 func (rp *ReplProtocol) sendRequestToAllFollowers(request *Packet) (index int, err error) {
