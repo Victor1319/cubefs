@@ -28,6 +28,7 @@ import (
 
 	"github.com/cubefs/cubefs/util"
 	"github.com/cubefs/cubefs/util/buf"
+	"github.com/cubefs/cubefs/util/log"
 )
 
 var (
@@ -867,6 +868,9 @@ func (p *Packet) GetUniqueLogId() (m string) {
 }
 
 func (p *Packet) setPacketPrefix() {
+	if !log.EnableDebug() {
+		return
+	}
 	p.mesg = fmt.Sprintf("Req(%v)_Partition(%v)_", p.ReqID, p.PartitionID)
 	if p.ExtentType == TinyExtentType && p.Opcode == OpMarkDelete && len(p.Data) > 0 {
 		ext := new(TinyExtentDeleteRecord)

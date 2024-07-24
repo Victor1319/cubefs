@@ -26,6 +26,7 @@ import (
 	"hash/crc32"
 	"strings"
 
+	"github.com/cubefs/cubefs/blobstore/util/bytespool"
 	"github.com/cubefs/cubefs/depends/tiglabs/raft"
 	raftProto "github.com/cubefs/cubefs/depends/tiglabs/raft/proto"
 	"github.com/cubefs/cubefs/proto"
@@ -103,16 +104,18 @@ func (s *DataNode) OperatePacket(p *repl.Packet, c net.Conn) (err error) {
 				log.LogErrorf(logContent)
 			}
 		} else {
-			logContent := fmt.Sprintf("action[OperatePacket] %v.",
-				p.LogMessage(p.GetOpMsg(), c.RemoteAddr().String(), start, nil))
-			switch p.Opcode {
-			case proto.OpStreamRead, proto.OpRead, proto.OpExtentRepairRead, proto.OpStreamFollowerRead, proto.OpBackupRead:
-			case proto.OpReadTinyDeleteRecord:
-				log.LogRead(logContent)
-			case proto.OpWrite, proto.OpRandomWrite, proto.OpSyncRandomWrite, proto.OpSyncWrite, proto.OpMarkDelete:
-				log.LogWrite(logContent)
-			default:
-				log.LogInfo(logContent)
+			if log.EnableInfo() {
+				logContent := fmt.Sprintf("action[OperatePacket] %v.",
+					p.LogMessage(p.GetOpMsg(), c.RemoteAddr().String(), start, nil))
+				switch p.Opcode {
+				case proto.OpStreamRead, proto.OpRead, proto.OpExtentRepairRead, proto.OpStreamFollowerRead, proto.OpBackupRead:
+				case proto.OpReadTinyDeleteRecord:
+					log.LogRead(logContent)
+				case proto.OpWrite, proto.OpRandomWrite, proto.OpSyncRandomWrite, proto.OpSyncWrite, proto.OpMarkDelete:
+					log.LogWrite(logContent)
+				default:
+					log.LogInfo(logContent)
+				}
 			}
 		}
 		p.Size = resultSize
@@ -122,11 +125,9 @@ func (s *DataNode) OperatePacket(p *repl.Packet, c net.Conn) (err error) {
 			c2 := p.CostUs()
 			c3 := (now.Nanosecond() - int(start)) / 1e3
 
-			exporter.Recoder.WithLabelValues("data_total_cost_beg").Observe(float64(c1))
-			exporter.Recoder.WithLabelValues("data_total_cost").Observe(float64(c2))
-			exporter.Recoder.WithLabelValues("data_read_cost").Observe(float64(c3))
-			cost := time.Since(now).Microseconds()
-			exporter.Recoder.WithLabelValues("data_coll_cost").Observe(float64(cost))
+			exporter.RecodCost("data_total_cost_beg", c1)
+			exporter.RecodCost("data_total_cost", int64(c2))
+			exporter.RecodCost("data_read_cost", int64(c3))
 		}
 
 		if !shallDegrade {
@@ -764,8 +765,10 @@ func (s *DataNode) extentRepairReadPacket(p *repl.Packet, connect net.Conn, isRe
 	if !shallDegrade {
 		metricPartitionIOLabels = GetIoMetricLabels(partition, "read")
 	}
-	log.LogDebugf("extentRepairReadPacket ready to repair dp(%v) disk(%v) extent(%v)", p.PartitionID,
-		partition.disk.Path, p.ExtentID)
+	if log.EnableDebug() {
+		log.LogDebugf("extentRepairReadPacket ready to repair dp(%v) disk(%v) extent(%v)", p.PartitionID,
+			partition.disk.Path, p.ExtentID)
+	}
 	for {
 		if needReplySize <= 0 {
 			break
@@ -777,7 +780,8 @@ func (s *DataNode) extentRepairReadPacket(p *repl.Packet, connect net.Conn, isRe
 		if currReadSize == util.ReadBlockSize {
 			reply.Data, _ = proto.Buffers.Get(util.ReadBlockSize)
 		} else {
-			reply.Data = make([]byte, currReadSize)
+			// reply.Data = make([]byte, currReadSize)
+			reply.Data = bytespool.Alloc(int(currReadSize))
 		}
 		if !shallDegrade {
 			partitionIOMetric = exporter.NewTPCnt(MetricPartitionIOName)
@@ -816,10 +820,14 @@ func (s *DataNode) extentRepairReadPacket(p *repl.Packet, connect net.Conn, isRe
 		offset += int64(currReadSize)
 		if currReadSize == util.ReadBlockSize {
 			proto.Buffers.Put(reply.Data)
+		} else {
+			bytespool.Free(reply.Data)
 		}
-		logContent := fmt.Sprintf("action[operatePacket] %v.",
-			reply.LogMessage(reply.GetOpMsg(), connect.RemoteAddr().String(), reply.StartT, err))
-		log.LogReadf(logContent)
+		if log.EnableInfo() {
+			logContent := fmt.Sprintf("action[operatePacket] %v.",
+				reply.LogMessage(reply.GetOpMsg(), connect.RemoteAddr().String(), reply.StartT, err))
+			log.LogReadf(logContent)
+		}
 	}
 	p.PacketOkReply()
 

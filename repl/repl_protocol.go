@@ -297,14 +297,14 @@ func (rp *ReplProtocol) readPkgAndPrepare() (err error) {
 	request.Beg = time.Now()
 	cost := request.CostUs()
 	if request.IsReadOperation() {
-		exporter.Recoder.WithLabelValues("data_read_conn").Observe(float64(cost))
+		exporter.RecodCost("data_read_conn", int64(cost))
 	}
 
-	if request.IsReadOperation() {
-		rp.writeDataBack(request)
-		err = rp.putResponse(request)
-		return
-	}
+	// if request.IsReadOperation() {
+	// 	rp.writeDataBack(request)
+	// 	err = rp.putResponse(request)
+	// 	return
+	// }
 
 	if log.EnableDebug() {
 		log.LogDebugf("action[readPkgAndPrepare] packet(%v) from remote(%v) ",
@@ -355,7 +355,7 @@ func (rp *ReplProtocol) writeDataBack(p *Packet) (err error) {
 		p.WriteToConn(rp.sourceConn)
 		return
 	}
-	exporter.Recoder.WithLabelValues("data_writeDataBack").Observe(float64(time.Since(start).Microseconds()))
+	exporter.RecodCost("data_writeDataBack", time.Since(start).Microseconds())
 	return nil
 }
 

@@ -351,7 +351,7 @@ func (e *Extent) Write(data []byte, offset, size int64, crc uint32, writeType in
 func (e *Extent) Read(data []byte, offset, size int64, isRepairRead bool) (crc uint32, err error) {
 	beg := time.Now()
 	defer func() {
-		exporter.Recoder.WithLabelValues("extent_read_in").Observe(float64(time.Since(beg).Microseconds()))
+		exporter.RecodCost("extent_read_in", time.Since(beg).Microseconds())
 	}()
 
 	if IsTinyExtent(e.extentID) {
@@ -360,7 +360,7 @@ func (e *Extent) Read(data []byte, offset, size int64, isRepairRead bool) (crc u
 	if _, err = e.file.ReadAt(data[:size], offset); err != nil {
 		return
 	}
-	crc = crc32.ChecksumIEEE(data)
+	crc = crc32.ChecksumIEEE(data[:size])
 	return
 }
 

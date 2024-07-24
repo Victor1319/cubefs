@@ -76,7 +76,7 @@ func (l *ioLimiter) ResetIO(ioConcurrency int) {
 }
 
 func (l *ioLimiter) Run(size int, taskFn func()) {
-	if size > 0 {
+	if size > 0 && l.limit > 0 {
 		if err := l.flow.WaitN(context.Background(), size); err != nil {
 			log.LogWarnf("action[limitio] run wait flow with %d %s", size, err.Error())
 		}

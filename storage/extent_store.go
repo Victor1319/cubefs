@@ -661,10 +661,12 @@ func (s *ExtentStore) Read(extentID uint64, offset, size int64, nbuf []byte, isR
 
 	beg := time.Now()
 	defer func() {
-		exporter.Recoder.WithLabelValues("extent_read").Observe(float64(time.Since(beg).Microseconds()))
+		exporter.RecodCost("extent_read", time.Since(beg).Microseconds())
 	}()
 
-	log.LogInfof("[Read] extent[%d] offset[%d] size[%d] isRepairRead[%v] extentLock[%v]", extentID, offset, size, isRepairRead, s.extentLock)
+	if log.EnableInfo() {
+		log.LogInfof("[Read] extent[%d] offset[%d] size[%d] isRepairRead[%v] extentLock[%v]", extentID, offset, size, isRepairRead, s.extentLock)
+	}
 	ei, _ := s.GetExtentInfo(extentID)
 	if ei == nil {
 		return 0, errors.Trace(ExtentHasBeenDeletedError, "[Read] extent[%d] is already been deleted", extentID)
