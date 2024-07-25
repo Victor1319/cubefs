@@ -51,7 +51,11 @@ var (
 		prometheus.GaugeOpts{
 			Name: "read_req_cnt",
 		})
+
+	reqChanSize = defaultChanSize
 )
+
+const defaultChanSize = 64
 
 func init() {
 	prometheus.MustRegister(clientMetric)
@@ -113,6 +117,12 @@ func init() {
 	evictRequestPool = &sync.Pool{New: func() interface{} {
 		return &EvictRequest{}
 	}}
+}
+
+func SetReqChanSize(size int) {
+	if size > defaultChanSize {
+		reqChanSize = size
+	}
 }
 
 type ExtentConfig struct {
@@ -388,7 +398,7 @@ func (client *ExtentClient) OpenStreamWithCache(inode uint64, needBCache bool) e
 	if !s.isOpen && !client.disableMetaCache {
 		s.isOpen = true
 		log.LogDebugf("open stream again, ino(%v)", s.inode)
-		s.request = make(chan interface{}, 64)
+		s.request = make(chan interface{}, reqChanSize)
 		s.pendingCache = make(chan bcacheKey, 1)
 		go s.server()
 		go s.asyncBlockCache()
@@ -682,7 +692,7 @@ func (client *ExtentClient) GetStreamer(inode uint64) *Streamer {
 	log.LogDebugf("GetStreamer: streamer(%v)", s)
 	if !s.isOpen {
 		s.isOpen = true
-		s.request = make(chan interface{}, 64)
+		s.request = make(chan interface{}, reqChanSize)
 		s.pendingCache = make(chan bcacheKey, 1)
 		go s.server()
 		go s.asyncBlockCache()
