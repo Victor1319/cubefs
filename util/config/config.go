@@ -42,6 +42,10 @@ func newConfig() *Config {
 	return result
 }
 
+func NewConfig() *Config {
+	return newConfig()
+}
+
 // LoadConfigFile loads config information from a JSON file.
 func LoadConfigFile(filename string) (*Config, error) {
 	result := newConfig()
@@ -89,6 +93,10 @@ func (c *Config) GetString(key string) string {
 
 // GetString returns a string for the config key.
 func (c *Config) SetString(key, val string) {
+	c.data[key] = val
+}
+
+func (c *Config) SetNewVal(key string, val interface{}) {
 	c.data[key] = val
 }
 

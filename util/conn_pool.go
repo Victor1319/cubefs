@@ -117,6 +117,22 @@ func (cp *ConnectPool) ReleaseAll(addr net.Addr) {
 }
 
 func (cp *ConnectPool) PutConnect(c *net.TCPConn, forceClose bool) {
+	cp.PutConnectV2(c, forceClose, "")
+}
+
+func (cp *ConnectPool) PutConnectEx(c *net.TCPConn, err error) {
+	if c == nil {
+		return
+	}
+	if err != nil {
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			cp.ReleaseAll(c.RemoteAddr())
+		}
+	}
+	cp.PutConnect(c, err != nil)
+}
+
+func (cp *ConnectPool) PutConnectV2(c *net.TCPConn, forceClose bool, addr string) {
 	if c == nil {
 		return
 	}
@@ -130,7 +146,9 @@ func (cp *ConnectPool) PutConnect(c *net.TCPConn, forceClose bool) {
 		return
 	default:
 	}
-	addr := c.RemoteAddr().String()
+	if addr == "" {
+		addr = c.RemoteAddr().String()
+	}
 	cp.RLock()
 	pool, ok := cp.pools[addr]
 	cp.RUnlock()
@@ -140,18 +158,6 @@ func (cp *ConnectPool) PutConnect(c *net.TCPConn, forceClose bool) {
 	}
 	object := &Object{conn: c, idle: time.Now().UnixNano()}
 	pool.PutConnectObjectToPool(object)
-}
-
-func (cp *ConnectPool) PutConnectEx(c *net.TCPConn, err error) {
-	if c == nil {
-		return
-	}
-	if err != nil {
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			cp.ReleaseAll(c.RemoteAddr())
-		}
-	}
-	cp.PutConnect(c, err != nil)
 }
 
 func (cp *ConnectPool) autoRelease() {

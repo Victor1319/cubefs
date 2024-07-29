@@ -100,7 +100,9 @@ func (cache *ExtentCache) update(gen, size uint64, eks []proto.ExtentKey) {
 	cache.Lock()
 	defer cache.Unlock()
 
-	log.LogDebugf("ExtentCache update: ino(%v) cache.gen(%v) cache.size(%v) gen(%v) size(%v)", cache.inode, cache.gen, cache.size, gen, size)
+	if log.EnableDebug() {
+		log.LogDebugf("ExtentCache update: ino(%v) cache.gen(%v) cache.size(%v) gen(%v) size(%v)", cache.inode, cache.gen, cache.size, gen, size)
+	}
 
 	//	cache.root.Ascend(func(bi btree.Item) bool {
 	//		ek := bi.(*proto.ExtentKey)
@@ -113,7 +115,9 @@ func (cache *ExtentCache) update(gen, size uint64, eks []proto.ExtentKey) {
 	//	}
 
 	if cache.gen != 0 && cache.gen >= gen {
-		log.LogDebugf("ExtentCache update: no need to update, ino(%v) gen(%v) size(%v)", cache.inode, gen, size)
+		if log.EnableDebug() {
+			log.LogDebugf("ExtentCache update: no need to update, ino(%v) gen(%v) size(%v)", cache.inode, gen, size)
+		}
 		return
 	}
 
@@ -304,7 +308,9 @@ func (cache *ExtentCache) PrepareReadRequests(offset, size int, data []byte) []*
 		ekStart := int(ek.FileOffset)
 		ekEnd := int(ek.FileOffset) + int(ek.Size)
 
-		log.LogDebugf("PrepareReadRequests: ino(%v) start(%v) end(%v) ekStart(%v) ekEnd(%v)", cache.inode, start, end, ekStart, ekEnd)
+		if log.EnableDebug() {
+			log.LogDebugf("PrepareReadRequests: ino(%v) start(%v) end(%v) ekStart(%v) ekEnd(%v)", cache.inode, start, end, ekStart, ekEnd)
+		}
 
 		if start < ekStart {
 			if end <= ekStart {
@@ -349,7 +355,9 @@ func (cache *ExtentCache) PrepareReadRequests(offset, size int, data []byte) []*
 		}
 	})
 
-	log.LogDebugf("PrepareReadRequests: ino(%v) start(%v) end(%v)", cache.inode, start, end)
+	if log.EnableDebug() {
+		log.LogDebugf("PrepareReadRequests: ino(%v) start(%v) end(%v)", cache.inode, start, end)
+	}
 	if start < end {
 		// add hole (start, end)
 		req := NewExtentRequest(start, end-start, data[start-offset:end-offset], nil)

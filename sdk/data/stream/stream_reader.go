@@ -142,7 +142,9 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 	)
 
 	ctx := context.Background()
-	s.client.readLimiter.Wait(ctx)
+	if s.client.readLimit() {
+		s.client.readLimiter.Wait(ctx)
+	}
 	s.client.LimitManager.ReadAlloc(ctx, size)
 	requests = s.extents.PrepareReadRequests(offset, size, data)
 	for _, req := range requests {
@@ -167,7 +169,9 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 	}
 
 	filesize, _ := s.extents.Size()
-	log.LogDebugf("read: ino(%v) requests(%v) filesize(%v)", s.inode, requests, filesize)
+	if log.EnableDebug() {
+		log.LogDebugf("read: ino(%v) requests(%v) filesize(%v)", s.inode, requests, filesize)
+	}
 	for _, req := range requests {
 		if req.ExtentKey == nil {
 			for i := range req.Data {
@@ -190,18 +194,25 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 
 			// Reading a hole, just fill zero
 			total += req.Size
-			log.LogDebugf("Stream read hole: ino(%v) req(%v) total(%v)", s.inode, req, total)
+			if log.EnableDebug() {
+				log.LogDebugf("Stream read hole: ino(%v) req(%v) total(%v)", s.inode, req, total)
+			}
 		} else {
-			log.LogDebugf("Stream read: ino(%v) req(%v) s.needBCache(%v) s.client.bcacheEnable(%v)", s.inode, req, s.needBCache, s.client.bcacheEnable)
+			if log.EnableDebug() {
+				log.LogDebugf("Stream read: ino(%v) req(%v) s.needBCache(%v) s.client.bcacheEnable(%v)", s.inode, req, s.needBCache, s.client.bcacheEnable)
+			}
 			if s.needBCache {
 				bcacheMetric := exporter.NewCounter("fileReadL1Cache")
 				bcacheMetric.AddWithLabels(1, map[string]string{exporter.Vol: s.client.volumeName})
 			}
 
 			//skip hole,ek is not nil,read block cache firstly
-			log.LogDebugf("Stream read: ino(%v) req(%v) s.client.bcacheEnable(%v) s.needBCache(%v)", s.inode, req, s.client.bcacheEnable, s.needBCache)
-			cacheKey := util.GenerateRepVolKey(s.client.volumeName, s.inode, req.ExtentKey.PartitionId, req.ExtentKey.ExtentId, req.ExtentKey.FileOffset)
+			if log.EnableDebug() {
+				log.LogDebugf("Stream read: ino(%v) req(%v) s.client.bcacheEnable(%v) s.needBCache(%v)", s.inode, req, s.client.bcacheEnable, s.needBCache)
+			}
+
 			if s.client.bcacheEnable && s.needBCache && filesize <= bcache.MaxFileSize {
+				cacheKey := util.GenerateRepVolKey(s.client.volumeName, s.inode, req.ExtentKey.PartitionId, req.ExtentKey.ExtentId, req.ExtentKey.FileOffset)
 				offset := req.FileOffset - int(req.ExtentKey.FileOffset)
 				if s.client.loadBcache != nil {
 					readBytes, err = s.client.loadBcache(cacheKey, req.Data, uint64(offset), uint32(req.Size))
@@ -228,6 +239,7 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 			}
 
 			if s.client.bcacheEnable && s.needBCache && filesize <= bcache.MaxFileSize {
+				cacheKey := util.GenerateRepVolKey(s.client.volumeName, s.inode, req.ExtentKey.PartitionId, req.ExtentKey.ExtentId, req.ExtentKey.FileOffset)
 				//limit big block cache
 				if s.exceedBlockSize(req.ExtentKey.Size) && atomic.LoadInt32(&s.client.inflightL1BigBlock) > 10 {
 					//do nothing
@@ -245,8 +257,10 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 
 			beg := time.Now()
 			readBytes, err = reader.Read(req)
-			clientMetric.WithLabelValues("Streamer_read_Read").Observe(float64(time.Since(beg).Microseconds()))
-			log.LogDebugf("TRACE Stream read: ino(%v) req(%v) readBytes(%v) err(%v)", s.inode, req, readBytes, err)
+			exporter.RecodCost("Streamer_read_Read", time.Since(beg).Microseconds())
+			if log.EnableDebug() {
+				log.LogDebugf("TRACE Stream read: ino(%v) req(%v) readBytes(%v) err(%v)", s.inode, req, readBytes, err)
+			}
 
 			total += readBytes
 

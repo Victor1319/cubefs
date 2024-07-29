@@ -39,14 +39,6 @@ import (
 )
 
 var (
-	clientMetric = prometheus.NewSummaryVec(
-		prometheus.SummaryOpts{
-			Namespace:  "cubefs",
-			Subsystem:  "client",
-			Name:       "client_cost_time",
-			Help:       "time cost in cubefs sdk",
-			Objectives: map[float64]float64{0.5: 0.05, 0.75: 0.025, 0.9: 0.01, 0.95: 0.005, 0.99: 0.001, 0.999: 0.0001, 0.9999: 0.00001},
-		}, []string{"api"})
 	readReqCountMetric = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "read_req_cnt",
@@ -58,7 +50,6 @@ var (
 const defaultChanSize = 64
 
 func init() {
-	prometheus.MustRegister(clientMetric)
 	prometheus.MustRegister(readReqCountMetric)
 }
 
@@ -178,6 +169,10 @@ type ExtentClient struct {
 	evictBcache        EvictBacheFunc
 	inflightL1cache    sync.Map
 	inflightL1BigBlock int32
+}
+
+func (client *ExtentClient) readLimit() bool {
+	return client.readLimiter.Limit() != rate.Inf
 }
 
 func (client *ExtentClient) UidIsLimited(uid uint32) bool {
@@ -570,7 +565,7 @@ func (client *ExtentClient) Read(inode uint64, data []byte, offset int, size int
 	//t1 := time.Now()
 	beg := time.Now()
 	defer func() {
-		clientMetric.WithLabelValues("Read").Observe(float64(time.Since(beg).Microseconds()))
+		exporter.RecodCost("Read", time.Since(beg).Microseconds())
 	}()
 	readReqCountMetric.Inc()
 
@@ -587,8 +582,7 @@ func (client *ExtentClient) Read(inode uint64, data []byte, offset int, size int
 	s.once.Do(func() {
 		beg = time.Now()
 		s.GetExtents()
-		clientMetric.WithLabelValues("Read_GetExtents").Observe(float64(time.Since(beg).Microseconds()))
-		s.GetExtents()
+		exporter.RecodCost("Read_GetExtents", time.Since(beg).Microseconds())
 	})
 
 	if !s.rdonly {
@@ -597,12 +591,12 @@ func (client *ExtentClient) Read(inode uint64, data []byte, offset int, size int
 		if err != nil {
 			return
 		}
-		clientMetric.WithLabelValues("Read_Flush").Observe(float64(time.Since(beg).Microseconds()))
+		exporter.RecodCost("Read_Flush", time.Since(beg).Microseconds())
 	}
 
 	beg = time.Now()
 	read, err = s.read(data, offset, size)
-	clientMetric.WithLabelValues("Read_read").Observe(float64(time.Since(beg).Microseconds()))
+	exporter.RecodCost("Read_read", time.Since(beg).Microseconds())
 	// log.LogErrorf("======> ExtentClient Read Exit, inode(%v), time[%v us].", inode, time.Since(t1).Microseconds())
 	return
 }
@@ -689,7 +683,9 @@ func (client *ExtentClient) GetStreamer(inode uint64) *Streamer {
 	if !ok {
 		return nil
 	}
-	log.LogDebugf("GetStreamer: streamer(%v)", s)
+	if log.EnableDebug() {
+		log.LogDebugf("GetStreamer: streamer(%v)", s)
+	}
 	if !s.isOpen {
 		s.isOpen = true
 		s.request = make(chan interface{}, reqChanSize)

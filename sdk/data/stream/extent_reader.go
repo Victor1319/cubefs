@@ -61,7 +61,9 @@ func (reader *ExtentReader) Read(req *ExtentRequest) (readBytes int, err error) 
 	reqPacket := NewReadPacket(reader.key, offset, size, reader.inode, req.FileOffset, reader.followerRead)
 	sc := NewStreamConn(reader.dp, reader.followerRead)
 
-	log.LogDebugf("ExtentReader Read enter: size(%v) req(%v) reqPacket(%v)", size, req, reqPacket)
+	if log.EnableDebug() {
+		log.LogDebugf("ExtentReader Read enter: size(%v) req(%v) reqPacket(%v)", size, req, reqPacket)
+	}
 
 	err = sc.Send(reader.retryRead, reqPacket, func(conn *net.TCPConn) (error, bool) {
 		readBytes = 0
@@ -110,7 +112,9 @@ func (reader *ExtentReader) Read(req *ExtentRequest) (readBytes int, err error) 
 		}
 	}
 
-	log.LogDebugf("ExtentReader Read exit: req(%v) reqPacket(%v) readBytes(%v) err(%v)", req, reqPacket, readBytes, err)
+	if log.EnableDebug() {
+		log.LogDebugf("ExtentReader Read exit: req(%v) reqPacket(%v) readBytes(%v) err(%v)", req, reqPacket, readBytes, err)
+	}
 	return
 }
 

@@ -123,7 +123,7 @@ func (sc *StreamConn) sendToPartition(req *Packet, retry bool, getReply GetReply
 	if err == nil {
 		err = sc.sendToConn(conn, req, getReply)
 		if err == nil {
-			StreamConnPool.PutConnect(conn, false)
+			StreamConnPool.PutConnectV2(conn, false, sc.currAddr)
 			return
 		}
 		log.LogWarnf("sendToPartition: send to curr addr failed, addr(%v) reqPacket(%v) err(%v)", sc.currAddr, req, err)
@@ -148,7 +148,7 @@ func (sc *StreamConn) sendToPartition(req *Packet, retry bool, getReply GetReply
 		sc.dp.LeaderAddr = addr
 		err = sc.sendToConn(conn, req, getReply)
 		if err == nil {
-			StreamConnPool.PutConnect(conn, false)
+			StreamConnPool.PutConnectV2(conn, false, addr)
 			return
 		}
 		StreamConnPool.PutConnect(conn, true)
@@ -162,7 +162,9 @@ func (sc *StreamConn) sendToPartition(req *Packet, retry bool, getReply GetReply
 
 func (sc *StreamConn) sendToConn(conn *net.TCPConn, req *Packet, getReply GetReplyFunc) (err error) {
 	for i := 0; i < StreamSendMaxRetry; i++ {
-		log.LogDebugf("sendToConn: send to addr(%v), reqPacket(%v)", sc.currAddr, req)
+		if log.EnableDebug() {
+			log.LogDebugf("sendToConn: send to addr(%v), reqPacket(%v)", sc.currAddr, req)
+		}
 		err = req.WriteToConn(conn)
 		if err != nil {
 			msg := fmt.Sprintf("sendToConn: failed to write to addr(%v) err(%v)", sc.currAddr, err)
@@ -206,6 +208,8 @@ func sortByStatus(dp *wrapper.DataPartition, selectAll bool) (hosts []string) {
 	} else {
 		dpHosts = dp.Hosts
 	}
+
+	hosts = make([]string, 0, len(dpHosts))
 
 	for _, addr := range dpHosts {
 		status, ok := hostsStatus[addr]
