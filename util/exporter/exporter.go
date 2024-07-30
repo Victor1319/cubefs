@@ -248,10 +248,10 @@ func collect() {
 	go collectGauge()
 	go collectHistogram()
 	go collectAlarm()
-	prometheus.Register(recoder)
+	prometheus.Register(Recoder)
 }
 
-var recoder = prometheus.NewHistogramVec(
+var Recoder = prometheus.NewHistogramVec(
 	prometheus.HistogramOpts{
 		Name:    "request_const_us",
 		Help:    "recode cost time by us",
@@ -283,7 +283,7 @@ func RecodCost(api string, costUs int64) {
 		return
 	}
 
-	ob = recoder.WithLabelValues(api)
+	ob = Recoder.WithLabelValues(api)
 	obMap[api] = ob
 	ob.Observe(float64(costUs))
 }
