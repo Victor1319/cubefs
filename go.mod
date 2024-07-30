@@ -5,6 +5,7 @@ go 1.17
 replace (
 	github.com/jacobsa/fuse => ./depends/jacobsa/fuse
 	github.com/spf13/cobra => ./depends/spf13/cobra
+	github.com/xtaci/smux => github.com/Victor1319/smux v0.0.0-20240730083634-56bef44ed090
 )
 
 require (

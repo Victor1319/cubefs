@@ -354,7 +354,7 @@ github.com/stretchr/testify/require
 # github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c
 ## explicit
 github.com/tecbot/gorocksdb
-# github.com/xtaci/smux v1.5.16
+# github.com/xtaci/smux v1.5.16 => github.com/Victor1319/smux v0.0.0-20240730083634-56bef44ed090
 ## explicit; go 1.13
 github.com/xtaci/smux
 # go.etcd.io/etcd/raft/v3 v3.5.8
@@ -389,9 +389,6 @@ golang.org/x/net/internal/timeseries
 golang.org/x/net/proxy
 golang.org/x/net/trace
 # golang.org/x/sync v0.1.0
-## explicit
-golang.org/x/sync/errgroup
-golang.org/x/sync/singleflight
 ## explicit
 golang.org/x/sync/errgroup
 golang.org/x/sync/singleflight
@@ -506,3 +503,4 @@ gopkg.in/yaml.v2
 gopkg.in/yaml.v3
 # github.com/jacobsa/fuse => ./depends/jacobsa/fuse
 # github.com/spf13/cobra => ./depends/spf13/cobra
+# github.com/xtaci/smux => github.com/Victor1319/smux v0.0.0-20240730083634-56bef44ed090

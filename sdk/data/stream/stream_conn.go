@@ -128,7 +128,7 @@ func (sc *StreamConn) Send(retry bool, req *Packet, getReply GetReplyFunc) (err 
 	return errors.New(fmt.Sprintf("StreamConn Send: retried %v times and still failed, sc(%v) reqPacket(%v)", StreamSendMaxRetry, sc, req))
 }
 
-var addrMap map[string]string
+var addrMap = map[string]string{}
 var addrLk sync.RWMutex
 
 func getSmuxAddr(addr string) string {
