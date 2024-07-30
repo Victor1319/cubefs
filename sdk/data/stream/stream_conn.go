@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -38,7 +39,7 @@ const (
 	StreamSendSleepInterval = 100 * time.Millisecond
 )
 
-type GetReplyFunc func(conn *net.TCPConn) (err error, again bool)
+type GetReplyFunc func(conn net.Conn) (err error, again bool)
 
 // StreamConn defines the struct of the stream connection.
 type StreamConn struct {
@@ -47,8 +48,17 @@ type StreamConn struct {
 }
 
 var (
-	StreamConnPool = util.NewConnectPool()
+	StreamConnPool     = util.NewConnectPool()
+	SmuxStreamConnPool *util.SmuxConnectPool
 )
+
+func init() {
+	cfg := util.DefaultSmuxConnPoolConfig()
+	cfg.Config.UseBuf = true
+	cfg.ConnsPerAddr = 8
+	cfg.StreamsPerConn = 8
+	SmuxStreamConnPool = util.NewSmuxConnectPool(cfg)
+}
 
 // NewStreamConn returns a new stream connection.
 func NewStreamConn(dp *wrapper.DataPartition, follower bool) (sc *StreamConn) {
@@ -118,16 +128,45 @@ func (sc *StreamConn) Send(retry bool, req *Packet, getReply GetReplyFunc) (err 
 	return errors.New(fmt.Sprintf("StreamConn Send: retried %v times and still failed, sc(%v) reqPacket(%v)", StreamSendMaxRetry, sc, req))
 }
 
+var addrMap map[string]string
+var addrLk sync.RWMutex
+
+func getSmuxAddr(addr string) string {
+	var newAddr string
+	addrLk.RLock()
+	newAddr = addrMap[addr]
+	addrLk.RUnlock()
+
+	if newAddr != "" {
+		return newAddr
+	}
+
+	addrLk.Lock()
+	defer addrLk.Unlock()
+
+	newAddr = addrMap[addr]
+	if newAddr != "" {
+		return newAddr
+	}
+
+	newAddr = util.ShiftAddrPort(addr, util.DefaultSmuxPortShift)
+	addrMap[addr] = newAddr
+	return newAddr
+}
+
 func (sc *StreamConn) sendToPartition(req *Packet, retry bool, getReply GetReplyFunc) (err error) {
-	conn, err := StreamConnPool.GetConnect(sc.currAddr)
+	newAddr := getSmuxAddr(sc.currAddr)
+	con, err := SmuxStreamConnPool.GetConnect(newAddr)
 	if err == nil {
-		err = sc.sendToConn(conn, req, getReply)
+		err = sc.sendToConn(con, req, getReply)
 		if err == nil {
-			StreamConnPool.PutConnectV2(conn, false, sc.currAddr)
+			// StreamConnPool.PutConnectV2(con, false, sc.currAddr)
+			SmuxStreamConnPool.PutConnectV2(con, false, newAddr)
 			return
 		}
 		log.LogWarnf("sendToPartition: send to curr addr failed, addr(%v) reqPacket(%v) err(%v)", sc.currAddr, req, err)
-		StreamConnPool.PutConnectEx(conn, err)
+		// StreamConnPool.PutConnectEx(con, err)
+		SmuxStreamConnPool.PutConnectV2(con, true, newAddr)
 		if err != TryOtherAddrError || !retry {
 			return
 		}
@@ -136,7 +175,7 @@ func (sc *StreamConn) sendToPartition(req *Packet, retry bool, getReply GetReply
 	}
 
 	hosts := sortByStatus(sc.dp, true)
-
+	var conn *net.TCPConn
 	for _, addr := range hosts {
 		log.LogWarnf("sendToPartition: try addr(%v) reqPacket(%v)", addr, req)
 		conn, err = StreamConnPool.GetConnect(addr)
@@ -160,7 +199,7 @@ func (sc *StreamConn) sendToPartition(req *Packet, retry bool, getReply GetReply
 	return errors.New(fmt.Sprintf("sendToPatition Failed: sc(%v) reqPacket(%v)", sc, req))
 }
 
-func (sc *StreamConn) sendToConn(conn *net.TCPConn, req *Packet, getReply GetReplyFunc) (err error) {
+func (sc *StreamConn) sendToConn(conn net.Conn, req *Packet, getReply GetReplyFunc) (err error) {
 	for i := 0; i < StreamSendMaxRetry; i++ {
 		if log.EnableDebug() {
 			log.LogDebugf("sendToConn: send to addr(%v), reqPacket(%v)", sc.currAddr, req)

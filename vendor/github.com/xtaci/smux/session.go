@@ -1,6 +1,7 @@
 package smux
 
 import (
+	"bufio"
 	"container/heap"
 	"encoding/binary"
 	"errors"
@@ -22,6 +23,30 @@ var (
 	ErrTimeout         = errors.New("timeout")
 	ErrWouldBlock      = errors.New("operation would block on IO")
 )
+
+type bufReadWriteCloser struct {
+	rw  *bufio.ReadWriter
+	con io.ReadWriteCloser
+}
+
+func newBufConn(conn io.ReadWriteCloser) *bufReadWriteCloser {
+	return &bufReadWriteCloser{
+		rw:  bufio.NewReadWriter(bufio.NewReaderSize(conn, 128<<10), bufio.NewWriterSize(conn, 1<<20)),
+		con: conn,
+	}
+}
+
+func (b *bufReadWriteCloser) Read(p []byte) (n int, err error) {
+	return b.rw.Read(p)
+}
+
+func (b *bufReadWriteCloser) Write(p []byte) (n int, err error) {
+	return b.rw.Write(p)
+}
+
+func (b *bufReadWriteCloser) Close() error {
+	return b.con.Close()
+}
 
 type writeRequest struct {
 	prio   uint32
@@ -78,6 +103,8 @@ type Session struct {
 
 	shaper chan writeRequest // a shaper for writing
 	writes chan writeRequest
+
+	flushFn func() error
 }
 
 func newSession(config *Config, conn io.ReadWriteCloser, client bool) *Session {
@@ -99,6 +126,12 @@ func newSession(config *Config, conn io.ReadWriteCloser, client bool) *Session {
 		s.nextStreamID = 1
 	} else {
 		s.nextStreamID = 0
+	}
+
+	if config.UseBuf {
+		bfc := newBufConn(conn)
+		s.conn = bfc
+		s.flushFn = bfc.rw.Flush
 	}
 
 	go s.shaperLoop()
@@ -448,42 +481,72 @@ func (s *Session) sendLoop() {
 		buf = make([]byte, (1<<16)+headerSize)
 	}
 
+	opReq := func(request writeRequest) error {
+		buf[0] = request.frame.ver
+		buf[1] = request.frame.cmd
+		binary.LittleEndian.PutUint16(buf[2:], uint16(len(request.frame.data)))
+		binary.LittleEndian.PutUint32(buf[4:], request.frame.sid)
+
+		if len(vec) > 0 {
+			vec[0] = buf[:headerSize]
+			vec[1] = request.frame.data
+			n, err = bw.WriteBuffers(vec)
+		} else {
+			copy(buf[headerSize:], request.frame.data)
+			n, err = s.conn.Write(buf[:headerSize+len(request.frame.data)])
+		}
+
+		n -= headerSize
+		if n < 0 {
+			n = 0
+		}
+
+		result := writeResult{
+			n:   n,
+			err: err,
+		}
+
+		request.result <- result
+		close(request.result)
+
+		return err
+	}
+
 	for {
 		select {
 		case <-s.die:
 			return
 		case request := <-s.writes:
-			buf[0] = request.frame.ver
-			buf[1] = request.frame.cmd
-			binary.LittleEndian.PutUint16(buf[2:], uint16(len(request.frame.data)))
-			binary.LittleEndian.PutUint32(buf[4:], request.frame.sid)
-
-			if len(vec) > 0 {
-				vec[0] = buf[:headerSize]
-				vec[1] = request.frame.data
-				n, err = bw.WriteBuffers(vec)
-			} else {
-				copy(buf[headerSize:], request.frame.data)
-				n, err = s.conn.Write(buf[:headerSize+len(request.frame.data)])
-			}
-
-			n -= headerSize
-			if n < 0 {
-				n = 0
-			}
-
-			result := writeResult{
-				n:   n,
-				err: err,
-			}
-
-			request.result <- result
-			close(request.result)
-
-			// store conn error
+			err = opReq(request)
 			if err != nil {
 				s.notifyWriteError(err)
 				return
+			}
+
+			flag := false
+			for i := 0; i < 64; i++ {
+				select {
+				case request1 := <-s.writes:
+					err = opReq(request1)
+					if err != nil {
+						s.notifyWriteError(err)
+						return
+					}
+				default:
+					flag = true
+				}
+
+				if flag {
+					break
+				}
+			}
+
+			if s.flushFn != nil {
+				err = s.flushFn()
+				if err != nil {
+					s.notifyWriteError(err)
+					return
+				}
 			}
 		}
 	}

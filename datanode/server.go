@@ -830,6 +830,7 @@ func (s *DataNode) parseSmuxConfig(cfg *config.Config) error {
 			return err
 		}
 	}
+	s.smuxConnPoolConfig.Config.UseBuf = true
 
 	//smux conn pool config
 	if s.enableSmuxConnPool {

@@ -38,6 +38,8 @@ type Config struct {
 	// MaxStreamBuffer is used to control the maximum
 	// number of data per stream
 	MaxStreamBuffer int
+
+	UseBuf bool
 }
 
 // DefaultConfig is used to return a default configuration

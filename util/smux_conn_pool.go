@@ -58,7 +58,7 @@ func ShiftAddrPort(addr string, shift int) (afterShift string) {
 	return
 }
 
-//filter smux accept error
+// filter smux accept error
 func FilterSmuxAcceptError(err error) error {
 	if err == nil {
 		return nil
@@ -87,6 +87,7 @@ type SmuxConnPoolConfig struct {
 	PoolCapacity      int
 	DialTimeout       time.Duration
 	StreamIdleTimeout int64
+	UseBuf            bool
 }
 
 func DefaultSmuxConnPoolConfig() *SmuxConnPoolConfig {
@@ -217,6 +218,10 @@ func (cp *SmuxConnectPool) GetConnect(targetAddr string) (c *smux.Stream, err er
 }
 
 func (cp *SmuxConnectPool) PutConnect(stream *smux.Stream, forceClose bool) {
+	cp.PutConnectV2(stream, forceClose, "")
+}
+
+func (cp *SmuxConnectPool) PutConnectV2(stream *smux.Stream, forceClose bool, addr string) {
 	if stream == nil {
 		return
 	}
@@ -225,7 +230,9 @@ func (cp *SmuxConnectPool) PutConnect(stream *smux.Stream, forceClose bool) {
 		return
 	default:
 	}
-	addr := stream.RemoteAddr().String()
+	if addr == "" {
+		addr = stream.RemoteAddr().String()
+	}
 	cp.RLock()
 	pool, ok := cp.pools[addr]
 	cp.RUnlock()
@@ -358,6 +365,7 @@ func (p *SmuxPool) initSessions() {
 		if err != nil {
 			continue
 		}
+
 		sess, err := smux.Client(conn, p.cfg.Config)
 		if err != nil {
 			conn.Close()
