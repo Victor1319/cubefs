@@ -25,14 +25,14 @@ var (
 )
 
 type bufReadWriteCloser struct {
-	rw  *bufio.ReadWriter
-	con io.ReadWriteCloser
+	rw *bufio.ReadWriter
+	net.Conn
 }
 
 func newBufConn(conn io.ReadWriteCloser) *bufReadWriteCloser {
 	return &bufReadWriteCloser{
-		rw:  bufio.NewReadWriter(bufio.NewReaderSize(conn, 128<<10), bufio.NewWriterSize(conn, 1<<20)),
-		con: conn,
+		rw:   bufio.NewReadWriter(bufio.NewReaderSize(conn, 128<<10), bufio.NewWriterSize(conn, 1<<20)),
+		Conn: conn.(net.Conn),
 	}
 }
 
@@ -45,7 +45,7 @@ func (b *bufReadWriteCloser) Write(p []byte) (n int, err error) {
 }
 
 func (b *bufReadWriteCloser) Close() error {
-	return b.con.Close()
+	return b.Conn.Close()
 }
 
 type writeRequest struct {

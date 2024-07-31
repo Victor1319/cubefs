@@ -104,6 +104,7 @@ const (
 	ConfigKeySmuxStreamPerConn = "smuxStreamPerConn"  //int
 	ConfigKeySmuxMaxBuffer     = "smuxMaxBuffer"      //int
 	ConfigKeySmuxTotalStream   = "sumxTotalStream"    //int
+	ConfigKeySmuxUseBuf        = "sumxUseBuf"         //int
 
 	//rate limit control enable
 	ConfigDiskQosEnable = "diskQosEnable" //bool
@@ -830,6 +831,7 @@ func (s *DataNode) parseSmuxConfig(cfg *config.Config) error {
 			return err
 		}
 	}
+	s.smuxServerConfig.UseBuf = cfg.GetBoolWithDefault(ConfigKeySmuxUseBuf, false)
 
 	//smux conn pool config
 	if s.enableSmuxConnPool {
