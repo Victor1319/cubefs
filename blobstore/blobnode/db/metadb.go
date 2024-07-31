@@ -417,15 +417,15 @@ func newMetaDB(dirpath string, config MetaConfig) (md *metadb, err error) {
 	priLevels := pri.GetLevels()
 	md.limiter = make([]*rate.Limiter, len(priLevels))
 
-	for priority, name := range priLevels {
-		para, exist := config.MetaQos[name]
-		if !exist || para.Iops <= 0 {
-			// No flow control by default without configuration
-			continue
-		}
-		controller := rate.NewLimiter(rate.Limit(para.Iops), 2*int(para.Iops))
-		md.limiter[priority] = controller
-	}
+	// for priority, name := range priLevels {
+	// 	para, exist := config.MetaQos[name]
+	// 	if !exist || para.Iops <= 0 {
+	// 		// No flow control by default without configuration
+	// 		continue
+	// 	}
+	// 	controller := rate.NewLimiter(rate.Limit(para.Iops), 2*int(para.Iops))
+	// 	md.limiter[priority] = controller
+	// }
 
 	span.Debugf("New KV(%s) DB(%v) success", dirpath, config)
 
