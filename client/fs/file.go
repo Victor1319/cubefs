@@ -321,13 +321,16 @@ func (f *File) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadR
 		stat.StatBandWidth("Read", uint32(req.Size))
 	}()
 
-	log.LogDebugf("TRACE Read enter: ino(%v) offset(%v) reqsize(%v) req(%v)", f.info.Inode, req.Offset, req.Size, req)
+	if log.EnableDebug() {
+		log.LogDebugf("TRACE Read enter: ino(%v) offset(%v) reqsize(%v) req(%v)", f.info.Inode, req.Offset, req.Size, req)
+	}
 
 	start := time.Now()
 
 	metric := exporter.NewTPCnt("fileread")
 	defer func() {
 		metric.SetWithLabels(err, map[string]string{exporter.Vol: f.super.volname})
+		exporter.RecodCost("fileread", time.Since(start).Microseconds())
 	}()
 	var size int
 	if proto.IsHot(f.super.volType) {
@@ -358,8 +361,10 @@ func (f *File) Read(ctx context.Context, req *fuse.ReadRequest, resp *fuse.ReadR
 		log.LogWarnf("Read: ino(%v) offset(%v) reqsize(%v) req(%v) size(%v)", f.info.Inode, req.Offset, req.Size, req, size)
 	}
 
-	elapsed := time.Since(start)
-	log.LogDebugf("TRACE Read: ino(%v) offset(%v) reqsize(%v) req(%v) size(%v) (%v)ns", f.info.Inode, req.Offset, req.Size, req, size, elapsed.Nanoseconds())
+	if log.EnableDebug() {
+		elapsed := time.Since(start)
+		log.LogDebugf("TRACE Read: ino(%v) offset(%v) reqsize(%v) req(%v) size(%v) (%v)ns", f.info.Inode, req.Offset, req.Size, req, size, elapsed.Nanoseconds())
+	}
 
 	return nil
 }

@@ -585,7 +585,7 @@ func (client *ExtentClient) Read(inode uint64, data []byte, offset int, size int
 		exporter.RecodCost("Read_GetExtents", time.Since(beg).Microseconds())
 	})
 
-	if !s.rdonly {
+	if !s.rdonly || s.dirty {
 		beg = time.Now()
 		err = s.IssueFlushRequest()
 		if err != nil {
