@@ -279,7 +279,7 @@ run_s3_test() {
 
     # install python requirements
     echo -n "Installing python requirements  ... "
-    pip3 install -r  ${work_path}/requirements.txt &>> /dev/null
+    pip3 install --require-hashes -r  ${work_path}/requirements.txt &>> /dev/null
     if [[ $? -ne 0 ]] ; then
         echo -e "\033[31mfail\033[0m"
         exit 1
