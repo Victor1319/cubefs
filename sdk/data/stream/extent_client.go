@@ -372,6 +372,7 @@ func (client *ExtentClient) OpenStreamRdonly(inode uint64, rdonly bool) error {
 			return fuse.EPERM
 		}
 
+		s.refcnt++
 		return nil
 	}
 
@@ -410,12 +411,16 @@ func (client *ExtentClient) CloseStream(inode uint64) error {
 		return nil
 	}
 
+	if log.EnableDebug() {
+		log.LogDebugf("CloseStream: streamer(%v)", s)
+	}
+
 	if s.rdonly {
+		s.refcnt--
 		client.streamerLock.Unlock()
 		return nil
 	}
 
-	log.LogDebugf("CloseStream: streamer(%v)", s)
 	return s.IssueReleaseRequest()
 }
 
@@ -430,7 +435,21 @@ func (client *ExtentClient) EvictStream(inode uint64) error {
 	if log.EnableDebug() {
 		log.LogDebugf("EvictStream streamer(%v)", s)
 	}
-	if s.isOpen && !s.rdonly {
+
+	if s.rdonly {
+		defer client.streamerLock.Unlock()
+		if s.refcnt > 0 || len(s.request) != 0 {
+			log.LogWarnf("evict: streamer(%v) refcnt(%v)", s.String(), s.refcnt)
+			return nil
+		}
+
+		if s.client.disableMetaCache || !s.needBCache {
+			delete(s.client.streamers, s.inode)
+		}
+		return nil
+	}
+
+	if s.isOpen {
 		err := s.IssueEvictRequest()
 		if err != nil {
 			return err
