@@ -621,6 +621,17 @@ func (s *DataNode) setDiskExtentReadLimitStatus(w http.ResponseWriter, r *http.R
 		s.buildFailureResp(w, http.StatusBadRequest, err.Error())
 		return
 	}
+
+	sync, err := strconv.ParseBool(r.FormValue("sync"))
+	if err != nil {
+		err = fmt.Errorf("parse param %v fail: %v", paramStatus, err)
+		s.buildFailureResp(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.sync = sync
+
+	log.LogWarnf("set disk status, status %v, sync %v", status, sync)
+
 	for _, disk := range s.space.disks {
 		disk.SetExtentRepairReadLimitStatus(status)
 	}

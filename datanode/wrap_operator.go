@@ -562,7 +562,7 @@ func (s *DataNode) handleWritePacket(p *repl.Packet) {
 		}
 
 		if writable := partition.disk.limitWrite.TryRun(int(p.Size), func() {
-			err = store.Write(p.ExtentID, p.ExtentOffset, int64(p.Size), p.Data, p.CRC, storage.AppendWriteType, p.IsSyncWrite(), p.Opcode == proto.OpBackupWrite)
+			err = store.Write(p.ExtentID, p.ExtentOffset, int64(p.Size), p.Data, p.CRC, storage.AppendWriteType, p.IsSyncWrite() || s.sync, p.Opcode == proto.OpBackupWrite)
 		}); !writable {
 			err = storage.LimitedIoError
 			return
@@ -581,7 +581,7 @@ func (s *DataNode) handleWritePacket(p *repl.Packet) {
 		}
 
 		if writable := partition.disk.limitWrite.TryRun(int(p.Size), func() {
-			err = store.Write(p.ExtentID, p.ExtentOffset, int64(p.Size), p.Data, p.CRC, storage.AppendWriteType, p.IsSyncWrite(), p.Opcode == proto.OpBackupWrite)
+			err = store.Write(p.ExtentID, p.ExtentOffset, int64(p.Size), p.Data, p.CRC, storage.AppendWriteType, p.IsSyncWrite() || s.sync, p.Opcode == proto.OpBackupWrite)
 		}); !writable {
 			err = storage.LimitedIoError
 			return
@@ -606,7 +606,7 @@ func (s *DataNode) handleWritePacket(p *repl.Packet) {
 			}
 
 			if writable := partition.disk.limitWrite.TryRun(currSize, func() {
-				err = store.Write(p.ExtentID, p.ExtentOffset+int64(offset), int64(currSize), data, crc, storage.AppendWriteType, p.IsSyncWrite(), p.Opcode == proto.OpBackupWrite)
+				err = store.Write(p.ExtentID, p.ExtentOffset+int64(offset), int64(currSize), data, crc, storage.AppendWriteType, p.IsSyncWrite() || s.sync, p.Opcode == proto.OpBackupWrite)
 			}); !writable {
 				err = storage.LimitedIoError
 				return

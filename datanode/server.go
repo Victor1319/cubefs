@@ -170,6 +170,7 @@ type DataNode struct {
 	clusterUuid             string
 	clusterUuidEnable       bool
 	started                 int32
+	sync                    bool
 }
 
 func NewServer() *DataNode {
