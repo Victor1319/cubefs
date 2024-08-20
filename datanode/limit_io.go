@@ -48,7 +48,7 @@ type LimiterStatus struct {
 func newIOLimiter(flowLimit, ioConcurrency int) *ioLimiter {
 	flow := rate.NewLimiter(rate.Inf, 0)
 	if flowLimit > 0 {
-		flow = rate.NewLimiter(rate.Limit(flowLimit), 2*flowLimit)
+		flow = rate.NewLimiter(rate.Limit(flowLimit), flowLimit/4)
 	}
 	l := &ioLimiter{limit: flowLimit, flow: flow}
 	l.io.Store(newIOQueue(ioConcurrency))
@@ -66,7 +66,7 @@ func (l *ioLimiter) ResetFlow(flowLimit int) {
 		l.flow.SetBurst(0)
 	} else {
 		l.flow.SetLimit(rate.Limit(flowLimit))
-		l.flow.SetBurst(2 * flowLimit)
+		l.flow.SetBurst(flowLimit / 4)
 	}
 }
 

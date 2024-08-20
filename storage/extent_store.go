@@ -574,6 +574,11 @@ func (s *ExtentStore) initBaseFileID() error {
 
 // Write writes the given extent to the disk.
 func (s *ExtentStore) Write(extentID uint64, offset, size int64, data []byte, crc uint32, writeType int, isSync bool, isBackupWrite bool) (err error) {
+	beg := time.Now()
+	defer func() {
+		exporter.RecodCost("extent_write", time.Since(beg).Microseconds())
+	}()
+
 	s.stopMutex.RLock()
 	defer s.stopMutex.RUnlock()
 	if s.IsClosed() {

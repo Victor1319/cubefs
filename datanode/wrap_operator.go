@@ -549,6 +549,12 @@ func (s *DataNode) handleWritePacket(p *repl.Packet) {
 		err = storage.BrokenDiskError
 		return
 	}
+
+	beg := time.Now()
+	defer func() {
+		exporter.RecodCost("extent_write_limit", time.Since(beg).Microseconds())
+	}()
+
 	store := partition.ExtentStore()
 	if p.ExtentType == proto.TinyExtentType {
 		if !shallDegrade {
