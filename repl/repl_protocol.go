@@ -319,11 +319,11 @@ func (rp *ReplProtocol) readPkgAndPrepare() (err error) {
 		return
 	}
 
-	if request.IsReadOperation() {
-		rp.operatorFunc(request, rp.sourceConn)
-		err = rp.putResponse(request)
-		return
-	}
+	// if request.IsReadOperation() {
+	// 	rp.operatorFunc(request, rp.sourceConn)
+	// 	err = rp.putResponse(request)
+	// 	return
+	// }
 
 	err = rp.putToBeProcess(request)
 
