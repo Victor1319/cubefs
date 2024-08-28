@@ -120,6 +120,7 @@ const (
 	ConfigDiskCurrentStopDpLimit = "diskCurrentStopDpLimit"
 	//disk read extent limit
 	ConfigEnableDiskReadExtentLimit = "enableDiskReadRepairExtentLimit" //bool
+	ConfigCacheCap                  = "cacheCap"
 )
 
 // DataNode defines the structure of a data node.
@@ -171,6 +172,7 @@ type DataNode struct {
 	clusterUuidEnable       bool
 	started                 int32
 	sync                    bool
+	cacheCap                int
 }
 
 func NewServer() *DataNode {
@@ -297,6 +299,10 @@ func (s *DataNode) parseConfig(cfg *config.Config) (err error) {
 		port       string
 		regexpPort *regexp.Regexp
 	)
+
+	s.cacheCap = cfg.GetInt(ConfigCacheCap)
+	log.LogWarnf("parseConfig: cache cap size %d", s.cacheCap)
+
 	LocalIP = cfg.GetString(ConfigKeyLocalIP)
 	port = cfg.GetString(proto.ListenPort)
 	s.bindIp = cfg.GetBool(proto.BindIpKey)

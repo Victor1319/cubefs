@@ -319,7 +319,7 @@ func newDataPartition(dpCfg *dataPartitionCfg, disk *Disk, isCreate bool) (dp *D
 	log.LogInfof("action[newDataPartition] dp %v replica num %v isCreate %v", partitionID, dpCfg.ReplicaNum, isCreate)
 	partition.replicasInit()
 	partition.extentStore, err = storage.NewExtentStore(partition.path, dpCfg.PartitionID, dpCfg.PartitionSize,
-		partition.partitionType, isCreate)
+		partition.partitionType, isCreate, disk.dataNode.cacheCap)
 	if err != nil {
 		return
 	}

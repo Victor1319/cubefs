@@ -58,6 +58,7 @@ const (
 	ConfigKeyWarnLogDir             = "warnLogDir"
 	ConfigKeyBuffersTotalLimit      = "buffersTotalLimit"
 	ConfigKeyLogLeftSpaceLimitRatio = "logLeftSpaceLimitRatio"
+	ConfigKeyFilesLimit             = "filesLimit"
 )
 
 const (
@@ -102,15 +103,19 @@ func interceptSignal(s common.Server) {
 	}()
 }
 
-func modifyOpenFiles() (err error) {
+func modifyOpenFiles(limit int64) (err error) {
+	if limit <= 0 {
+		limit = 1024000
+	}
+
 	var rLimit syscall.Rlimit
 	err = syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)
 	if err != nil {
 		return fmt.Errorf("Error Getting Rlimit %v", err.Error())
 	}
 	syslog.Println(rLimit)
-	rLimit.Max = 1024000
-	rLimit.Cur = 1024000
+	rLimit.Max = uint64(limit)
+	rLimit.Cur = uint64(limit)
 	err = syscall.Setrlimit(syscall.RLIMIT_NOFILE, &rLimit)
 	if err != nil {
 		return fmt.Errorf("Error Setting Rlimit %v", err.Error())
@@ -161,6 +166,7 @@ func main() {
 	profPort := cfg.GetString(ConfigKeyProfPort)
 	umpDatadir := cfg.GetString(ConfigKeyWarnLogDir)
 	buffersTotalLimit := cfg.GetInt64(ConfigKeyBuffersTotalLimit)
+	filesLimit := cfg.GetInt64(ConfigKeyFilesLimit)
 	logLeftSpaceLimitRatioStr := cfg.GetString(ConfigKeyLogLeftSpaceLimitRatio)
 	logLeftSpaceLimitRatio, err := strconv.ParseFloat(logLeftSpaceLimitRatioStr, 64)
 	if err != nil || logLeftSpaceLimitRatio <= 0 || logLeftSpaceLimitRatio > 1.0 {
@@ -268,7 +274,7 @@ func main() {
 
 	syslog.Printf("Hello, CubeFS Storage\n%s\n", Version)
 
-	err = modifyOpenFiles()
+	err = modifyOpenFiles(filesLimit)
 	if err != nil {
 		err = errors.NewErrorf("Fatal: failed to modify open files - %v", err)
 		syslog.Println(err)

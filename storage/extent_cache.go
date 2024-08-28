@@ -24,6 +24,12 @@ import (
 
 // ExtentMapItem stores the extent entity pointer and the element
 // pointer of the extent entity in a cache list.
+
+const (
+	extentTimeOut = 60 // 60s
+	minCacheCap   = 100
+)
+
 type ExtentMapItem struct {
 	e       *Extent
 	element *list.Element
@@ -41,6 +47,10 @@ type ExtentCache struct {
 
 // NewExtentCache creates and returns a new ExtentCache instance.
 func NewExtentCache(capacity int) *ExtentCache {
+	if capacity <= 0 {
+		capacity = minCacheCap
+	}
+
 	return &ExtentCache{
 		extentMap:   make(map[uint64]*ExtentMapItem),
 		extentList:  list.New(),
@@ -148,6 +158,24 @@ func (cache *ExtentCache) evict() {
 			front := e.Value.(*Extent)
 			if IsTinyExtent(front.extentID) {
 				continue
+			}
+			delete(cache.extentMap, front.extentID)
+			cache.extentList.Remove(e)
+			front.Close()
+		}
+	}
+
+	// clean timeout extent cache
+	needRemove = cache.extentList.Len() - minCacheCap
+	now := time.Now().Second()
+	for i := 0; i < needRemove; i++ {
+		if e := cache.extentList.Front(); e != nil {
+			front := e.Value.(*Extent)
+			if IsTinyExtent(front.extentID) {
+				continue
+			}
+			if now < int(front.accessTime)+extentTimeOut {
+				return
 			}
 			delete(cache.extentMap, front.extentID)
 			cache.extentList.Remove(e)

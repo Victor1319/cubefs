@@ -148,7 +148,7 @@ func MkdirAll(name string) (err error) {
 	return os.MkdirAll(name, 0755)
 }
 
-func NewExtentStore(dataDir string, partitionID uint64, storeSize, dpType int, isCreate bool) (s *ExtentStore, err error) {
+func NewExtentStore(dataDir string, partitionID uint64, storeSize, dpType int, isCreate bool, cap int) (s *ExtentStore, err error) {
 	begin := time.Now()
 	defer func() {
 		log.LogInfof("[NewExtentStore] load dp(%v) new extent store using time(%v)", partitionID, time.Since(begin))
@@ -201,7 +201,7 @@ func NewExtentStore(dataDir string, partitionID uint64, storeSize, dpType int, i
 
 	s.extentInfoMap = make(map[uint64]*ExtentInfo)
 	s.extentLockMap = make(map[uint64]proto.GcFlag, 0)
-	s.cache = NewExtentCache(10000)
+	s.cache = NewExtentCache(cap)
 	if err = s.initBaseFileID(); err != nil {
 		err = fmt.Errorf("init base field ID: %v", err)
 		return
