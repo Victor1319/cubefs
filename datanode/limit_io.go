@@ -25,7 +25,10 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const minusOne = ^uint32(0)
+const (
+	minusOne           = ^uint32(0)
+	defaultQueueFactor = 8
+)
 
 type ioLimiter struct {
 	limit int
@@ -45,13 +48,13 @@ type LimiterStatus struct {
 
 // flow rate limiter's burst is double limit.
 // max queue size of io is 8-times io concurrency.
-func newIOLimiter(flowLimit, ioConcurrency int) *ioLimiter {
+func newIOLimiter(flowLimit, ioConcurrency, factor int) *ioLimiter {
 	flow := rate.NewLimiter(rate.Inf, 0)
 	if flowLimit > 0 {
 		flow = rate.NewLimiter(rate.Limit(flowLimit), flowLimit/4)
 	}
 	l := &ioLimiter{limit: flowLimit, flow: flow}
-	l.io.Store(newIOQueue(ioConcurrency))
+	l.io.Store(newIOQueue(ioConcurrency, factor))
 	return l
 }
 
@@ -70,8 +73,8 @@ func (l *ioLimiter) ResetFlow(flowLimit int) {
 	}
 }
 
-func (l *ioLimiter) ResetIO(ioConcurrency int) {
-	q := l.io.Swap(newIOQueue(ioConcurrency)).(*ioQueue)
+func (l *ioLimiter) ResetIO(ioConcurrency, factor int) {
+	q := l.io.Swap(newIOQueue(ioConcurrency, factor)).(*ioQueue)
 	q.Close()
 }
 
@@ -116,7 +119,7 @@ func (l *ioLimiter) Status() (st LimiterStatus) {
 }
 
 func (l *ioLimiter) Close() {
-	q := l.io.Swap(newIOQueue(0)).(*ioQueue)
+	q := l.io.Swap(newIOQueue(0, 0)).(*ioQueue)
 	q.Close()
 }
 
@@ -134,14 +137,18 @@ type ioQueue struct {
 	queue       chan *task
 }
 
-func newIOQueue(concurrency int) *ioQueue {
+func newIOQueue(concurrency, factor int) *ioQueue {
 	q := &ioQueue{concurrency: concurrency}
 	if q.concurrency <= 0 {
 		return q
 	}
 
+	if factor <= 0 {
+		factor = defaultQueueFactor
+	}
+
 	q.stopCh = make(chan struct{})
-	q.queue = make(chan *task, 8*concurrency)
+	q.queue = make(chan *task, factor*concurrency)
 	q.wg.Add(concurrency)
 	for ii := 0; ii < concurrency; ii++ {
 		go func() {

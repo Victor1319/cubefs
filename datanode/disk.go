@@ -116,8 +116,8 @@ func NewDisk(path string, reservedSpace, diskRdonlySpace uint64, maxErrCnt int, 
 	d.limitFactor[proto.FlowWriteType] = rate.NewLimiter(rate.Limit(proto.QosDefaultDiskMaxFLowLimit), proto.QosDefaultBurst)
 	d.limitFactor[proto.IopsReadType] = rate.NewLimiter(rate.Limit(proto.QosDefaultDiskMaxIoLimit), defaultIOLimitBurst)
 	d.limitFactor[proto.IopsWriteType] = rate.NewLimiter(rate.Limit(proto.QosDefaultDiskMaxIoLimit), defaultIOLimitBurst)
-	d.limitRead = newIOLimiter(space.dataNode.diskReadFlow, space.dataNode.diskReadIocc)
-	d.limitWrite = newIOLimiter(space.dataNode.diskWriteFlow, space.dataNode.diskWriteIocc)
+	d.limitRead = newIOLimiter(space.dataNode.diskReadFlow, space.dataNode.diskReadIocc, 0)
+	d.limitWrite = newIOLimiter(space.dataNode.diskWriteFlow, space.dataNode.diskWriteIocc, space.dataNode.diskQueueFactor)
 	d.extentRepairReadLimit = make(chan struct{}, MaxExtentRepairReadLimit)
 	d.extentRepairReadLimit <- struct{}{}
 	d.enableExtentRepairReadLimit = diskEnableReadRepairExtentLimit
@@ -140,12 +140,12 @@ func (d *Disk) updateQosLimiter() {
 	for i := proto.IopsReadType; i < proto.FlowWriteType; i++ {
 		log.LogInfof("action[updateQosLimiter] type %v limit %v", proto.QosTypeString(i), d.limitFactor[i].Limit())
 	}
-	log.LogInfof("action[updateQosLimiter] read(iocc:%d iops:%d flow:%d) write(iocc:%d iops:%d flow:%d)",
+	log.LogWarnf("action[updateQosLimiter] read(iocc:%d iops:%d flow:%d) write(iocc:%d iops:%d flow:%d, factor:%d)",
 		d.dataNode.diskReadIocc, d.dataNode.diskReadIops, d.dataNode.diskReadFlow,
-		d.dataNode.diskWriteIocc, d.dataNode.diskWriteIops, d.dataNode.diskWriteFlow)
-	d.limitRead.ResetIO(d.dataNode.diskReadIocc)
+		d.dataNode.diskWriteIocc, d.dataNode.diskWriteIops, d.dataNode.diskWriteFlow, d.dataNode.diskQueueFactor)
+	d.limitRead.ResetIO(d.dataNode.diskReadIocc, 0)
 	d.limitRead.ResetFlow(d.dataNode.diskReadFlow)
-	d.limitWrite.ResetIO(d.dataNode.diskWriteIocc)
+	d.limitWrite.ResetIO(d.dataNode.diskWriteIocc, d.dataNode.diskQueueFactor)
 	d.limitWrite.ResetFlow(d.dataNode.diskWriteFlow)
 }
 

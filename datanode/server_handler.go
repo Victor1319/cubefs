@@ -371,12 +371,13 @@ func (s *DataNode) setDiskQos(w http.ResponseWriter, r *http.Request) {
 
 	updated := false
 	for key, pVal := range map[string]*int{
-		ConfigDiskReadIocc:  &s.diskReadIocc,
-		ConfigDiskReadIops:  &s.diskReadIops,
-		ConfigDiskReadFlow:  &s.diskReadFlow,
-		ConfigDiskWriteIocc: &s.diskWriteIocc,
-		ConfigDiskWriteIops: &s.diskWriteIops,
-		ConfigDiskWriteFlow: &s.diskWriteFlow,
+		ConfigDiskReadIocc:    &s.diskReadIocc,
+		ConfigDiskReadIops:    &s.diskReadIops,
+		ConfigDiskReadFlow:    &s.diskReadFlow,
+		ConfigDiskWriteIocc:   &s.diskWriteIocc,
+		ConfigDiskWriteIops:   &s.diskWriteIops,
+		ConfigDiskWriteFlow:   &s.diskWriteFlow,
+		ConfigDiskQueueFactor: &s.diskQueueFactor,
 	} {
 		val, err, has := parser(key)
 		if err != nil {

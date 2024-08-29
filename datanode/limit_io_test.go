@@ -30,9 +30,9 @@ func TestLimitIOBase(t *testing.T) {
 		{100, -1},
 		{1 << 20, 4},
 	} {
-		l := newIOLimiter(flowIO[0], flowIO[1])
+		l := newIOLimiter(flowIO[0], flowIO[1], 0)
 		l.ResetFlow(flowIO[0])
-		l.ResetIO(flowIO[1])
+		l.ResetIO(flowIO[1], 0)
 		l.Run(0, f)
 		l.Run(10, f)
 		require.True(t, l.TryRun(1, f))
@@ -40,7 +40,7 @@ func TestLimitIOBase(t *testing.T) {
 	}
 
 	{
-		l := newIOLimiter(1<<10, 0)
+		l := newIOLimiter(1<<10, 0, 0)
 		l.Run(10, f)
 		st := l.Status()
 		t.Logf("status: %+v", st)
@@ -54,7 +54,7 @@ func TestLimitIOBase(t *testing.T) {
 	}
 	{
 		done := make(chan struct{})
-		l := newIOLimiter(-1, 2)
+		l := newIOLimiter(-1, 2, 0)
 		st := l.Status()
 		t.Logf("before status: %+v", st)
 		for ii := 0; ii < st.IOConcurrency; ii++ {
@@ -80,7 +80,7 @@ func TestLimitIOBase(t *testing.T) {
 }
 
 func TestLimitIOConcurrency(t *testing.T) {
-	l := newIOLimiter(1<<10, 10)
+	l := newIOLimiter(1<<10, 10, 0)
 	done := make(chan struct{})
 	go func() {
 		for {
@@ -92,7 +92,7 @@ func TestLimitIOConcurrency(t *testing.T) {
 
 			time.Sleep(time.Microsecond)
 			l.ResetFlow(1 << 10)
-			l.ResetIO(10)
+			l.ResetIO(10, 0)
 		}
 	}()
 

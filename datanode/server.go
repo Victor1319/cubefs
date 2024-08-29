@@ -107,13 +107,14 @@ const (
 	ConfigKeySmuxUseBuf        = "sumxUseBuf"         //int
 
 	//rate limit control enable
-	ConfigDiskQosEnable = "diskQosEnable" //bool
-	ConfigDiskReadIocc  = "diskReadIocc"  // int
-	ConfigDiskReadIops  = "diskReadIops"  // int
-	ConfigDiskReadFlow  = "diskReadFlow"  // int
-	ConfigDiskWriteIocc = "diskWriteIocc" // int
-	ConfigDiskWriteIops = "diskWriteIops" // int
-	ConfigDiskWriteFlow = "diskWriteFlow" // int
+	ConfigDiskQosEnable   = "diskQosEnable"   //bool
+	ConfigDiskReadIocc    = "diskReadIocc"    // int
+	ConfigDiskReadIops    = "diskReadIops"    // int
+	ConfigDiskReadFlow    = "diskReadFlow"    // int
+	ConfigDiskWriteIocc   = "diskWriteIocc"   // int
+	ConfigDiskWriteIops   = "diskWriteIops"   // int
+	ConfigDiskWriteFlow   = "diskWriteFlow"   // int
+	ConfigDiskQueueFactor = "diskQueueFactor" // int
 
 	// load/stop dp limit
 	ConfigDiskCurrentLoadDpLimit = "diskCurrentLoadDpLimit"
@@ -168,6 +169,7 @@ type DataNode struct {
 	diskWriteIocc           int
 	diskWriteIops           int
 	diskWriteFlow           int
+	diskQueueFactor         int
 	clusterUuid             string
 	clusterUuidEnable       bool
 	started                 int32
