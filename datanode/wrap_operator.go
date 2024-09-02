@@ -120,10 +120,10 @@ func (s *DataNode) OperatePacket(p *repl.Packet, c net.Conn) (err error) {
 		}
 		p.Size = resultSize
 		if p.IsReadOperation() {
-			now := time.Now()
+			now := time.Now().UnixNano()
 			c1 := time.Since(p.Beg).Microseconds()
 			c2 := p.CostUs()
-			c3 := (now.Nanosecond() - int(start)) / 1e3
+			c3 := (now - start) / 1e3
 
 			exporter.RecodCost("data_total_cost_beg", c1)
 			exporter.RecodCost("data_total_cost", int64(c2))

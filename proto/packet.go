@@ -293,7 +293,7 @@ func (p *Packet) CostUs() int {
 		return  int(time.Now().UnixMicro() - p.ReqID)
 	}
 
-	return (time.Now().Nanosecond() - int(p.StartT)) / 1e3
+	return (int(time.Now().UnixNano()) - int(p.StartT)) / 1e3
 }
 
 func (p *Packet) GetCopy() *Packet {
