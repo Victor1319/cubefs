@@ -17,13 +17,14 @@ package stream
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/cubefs/cubefs/proto"
-	"github.com/cubefs/cubefs/sdk/data/wrapper"
-	"github.com/cubefs/cubefs/util"
 	"hash/crc32"
 	"io"
 	"net"
 	"time"
+
+	"github.com/cubefs/cubefs/proto"
+	"github.com/cubefs/cubefs/sdk/data/wrapper"
+	"github.com/cubefs/cubefs/util"
 )
 
 // Packet defines a wrapper of the packet in proto.
@@ -88,7 +89,8 @@ func NewReadPacket(key *proto.ExtentKey, extentOffset, size int, inode uint64, f
 		p.Opcode = proto.OpStreamRead
 	}
 	p.ExtentType = proto.NormalExtentType
-	p.ReqID = proto.GenerateRequestID()
+	// p.ReqID = proto.GenerateRequestID()
+	p.ReqID = time.Now().UnixMicro()
 	p.RemainingFollowers = 0
 	p.inode = inode
 	p.KernelOffset = uint64(fileOffset)

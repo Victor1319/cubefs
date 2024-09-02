@@ -130,6 +130,7 @@ func (sc *StreamConn) Send(retry bool, req *Packet, getReply GetReplyFunc) (err 
 
 var addrMap = map[string]string{}
 var addrLk sync.RWMutex
+var EnableSmux bool
 
 func getSmuxAddr(addr string) string {
 	var newAddr string
@@ -155,18 +156,37 @@ func getSmuxAddr(addr string) string {
 }
 
 func (sc *StreamConn) sendToPartition(req *Packet, retry bool, getReply GetReplyFunc) (err error) {
-	newAddr := getSmuxAddr(sc.currAddr)
-	con, err := SmuxStreamConnPool.GetConnect(newAddr)
+
+	if EnableSmux {
+		newAddr := getSmuxAddr(sc.currAddr)
+		con, err := SmuxStreamConnPool.GetConnect(newAddr)
+		if err == nil {
+			err = sc.sendToConn(con, req, getReply)
+			if err == nil {
+				// StreamConnPool.PutConnectV2(con, false, sc.currAddr)
+				SmuxStreamConnPool.PutConnectV2(con, false, newAddr)
+				return nil
+			}
+			log.LogWarnf("sendToPartition: send to curr addr failed, addr(%v) reqPacket(%v) err(%v)", sc.currAddr, req, err)
+			// StreamConnPool.PutConnectEx(con, err)
+			SmuxStreamConnPool.PutConnectV2(con, true, newAddr)
+			if err != TryOtherAddrError || !retry {
+				return err
+			}
+		} else {
+			log.LogWarnf("sendToPartition: get connection to curr addr failed, addr(%v) reqPacket(%v) err(%v)", sc.currAddr, req, err)
+		}
+	}
+	// newAddr := getSmuxAddr(sc.currAddr)
+	con, err := StreamConnPool.GetConnect(sc.currAddr)
 	if err == nil {
 		err = sc.sendToConn(con, req, getReply)
 		if err == nil {
-			// StreamConnPool.PutConnectV2(con, false, sc.currAddr)
-			SmuxStreamConnPool.PutConnectV2(con, false, newAddr)
+			StreamConnPool.PutConnectV2(con, false, sc.currAddr)
 			return
 		}
 		log.LogWarnf("sendToPartition: send to curr addr failed, addr(%v) reqPacket(%v) err(%v)", sc.currAddr, req, err)
-		// StreamConnPool.PutConnectEx(con, err)
-		SmuxStreamConnPool.PutConnectV2(con, true, newAddr)
+		StreamConnPool.PutConnectEx(con, err)
 		if err != TryOtherAddrError || !retry {
 			return
 		}
