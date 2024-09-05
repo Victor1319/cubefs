@@ -27,7 +27,9 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unsafe"
 
+	"github.com/cubefs/cubefs/blobstore/util/bytespool"
 	"github.com/cubefs/cubefs/util"
 	"github.com/cubefs/cubefs/util/exporter"
 	"github.com/cubefs/cubefs/util/log"
@@ -134,6 +136,7 @@ func (extInfos SortedExtentInfos) Swap(i, j int) {
 // Header of extent include inode value of this extent block and Crc blocks of data blocks.
 type Extent struct {
 	file       *os.File
+	readFile   *os.File
 	filePath   string
 	extentID   uint64
 	modifyTime int64
@@ -173,6 +176,9 @@ func (e *Extent) Close() (err error) {
 	if err = e.file.Close(); err != nil {
 		return
 	}
+	if err = e.readFile.Close(); err != nil {
+		return
+	}
 	return
 }
 
@@ -193,10 +199,14 @@ func (e *Extent) InitToFS() (err error) {
 	if e.file, err = os.OpenFile(e.filePath, ExtentOpenOpt, 0666); err != nil {
 		return err
 	}
+	if e.readFile, err = os.OpenFile(e.filePath, os.O_RDONLY|syscall.O_DIRECT, 0666); err != nil {
+		return err
+	}
 
 	defer func() {
 		if err != nil {
 			e.file.Close()
+			e.readFile.Close()
 			os.Remove(e.filePath)
 		}
 	}()
@@ -214,6 +224,12 @@ func (e *Extent) InitToFS() (err error) {
 // RestoreFromFS restores the entity data and status from the file stored on the filesystem.
 func (e *Extent) RestoreFromFS() (err error) {
 	if e.file, err = os.OpenFile(e.filePath, os.O_RDWR, 0666); err != nil {
+		if os.IsNotExist(err) {
+			err = ExtentNotFoundError
+		}
+		return err
+	}
+	if e.readFile, err = os.OpenFile(e.filePath, os.O_RDONLY|syscall.O_DIRECT, 0666); err != nil {
 		if os.IsNotExist(err) {
 			err = ExtentNotFoundError
 		}
@@ -357,11 +373,73 @@ func (e *Extent) Read(data []byte, offset, size int64, isRepairRead bool) (crc u
 	if IsTinyExtent(e.extentID) {
 		return e.ReadTiny(data, offset, size, isRepairRead)
 	}
-	if _, err = e.file.ReadAt(data[:size], offset); err != nil {
+
+	if size < util.BlockSize {
+		err = e.ReadAligned(data, offset, size)
+	} else {
+		_, err = e.file.ReadAt(data[:size], offset)
+	}
+
+	if err != nil {
 		return
 	}
+
 	crc = crc32.ChecksumIEEE(data[:size])
 	return
+}
+
+const pageSize = 4096
+const AlignSize = 4096
+
+func (e *Extent) ReadAligned(data []byte, offset, size int64) error {
+
+	start := offset / pageSize * pageSize
+	end := (offset + size + pageSize - 1) / pageSize * pageSize
+
+	newSize := end - start
+
+	block := bytespool.Alloc(int(newSize) + AlignSize)
+	defer bytespool.Free(block)
+
+	newData := AlignedBlock(int(newSize), block)
+
+	n, err := e.readFile.ReadAt(newData, start)
+	if err != nil && err != io.EOF {
+		return err
+	}
+
+	newEnd := offset - start + size
+	if n < int(newEnd) {
+		return fmt.Errorf("read data size %d less than req, off %d, start %d, size %d",
+			n, offset, start, size)
+	}
+
+	copy(data, newData[offset-start:offset-start+size])
+
+	return nil
+}
+
+func alignment(block []byte, AlignSize int) int {
+	return int(uintptr(unsafe.Pointer(&block[0])) & uintptr(AlignSize-1))
+}
+
+// AlignedBlock returns []byte of size BlockSize aligned to a multiple
+// of AlignSize in memory (must be power of two)
+func AlignedBlock(blkSize int, block []byte) []byte {
+	a := alignment(block, AlignSize)
+	offset := 0
+	if a != 0 {
+		offset = AlignSize - a
+	}
+	block = block[offset : offset+blkSize]
+	// Can't check alignment of a zero sized block
+	if blkSize != 0 {
+		a = alignment(block, AlignSize)
+		if a != 0 {
+			log.LogFatal("Failed to align block")
+		}
+	}
+	return block
 }
 
 // ReadTiny read data from a tiny extent.
