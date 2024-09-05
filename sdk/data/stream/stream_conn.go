@@ -48,8 +48,9 @@ type StreamConn struct {
 }
 
 var (
-	StreamConnPool     = util.NewConnectPool()
-	SmuxStreamConnPool *util.SmuxConnectPool
+	StreamConnPool      = util.NewConnectPool()
+	StreamWriteConnPool = util.NewConnectPool()
+	SmuxStreamConnPool  *util.SmuxConnectPool
 )
 
 func init() {
