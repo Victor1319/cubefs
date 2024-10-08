@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cubefs/cubefs/proto"
+	"github.com/cubefs/cubefs/util/log"
 )
 
 func (mp *metaPartition) UpdateXAttr(req *proto.UpdateXAttrRequest, p *Packet) (err error) {
@@ -224,13 +225,18 @@ func (mp *metaPartition) putExtend(op uint32, extend *Extend) (resp interface{},
 }
 
 func (mp *metaPartition) LockDir(req *proto.LockDirRequest, p *Packet) (err error) {
+
 	req.SubmitTime = time.Now()
+	if req.LockId == 0 && req.Lease != 0 {
+		req.LockId = proto.GenerateRequestID()
+		log.LogWarnf("LockDir: req %s has empty lkId, use reqId as lockId", req.String())
+	}
+
 	val, err := json.Marshal(req)
 	if err != nil {
 		p.PacketErrorWithBody(proto.OpErr, []byte(err.Error()))
 		return err
 	}
-
 	r, err := mp.submit(opFSMLockDir, val)
 	if err != nil {
 		p.PacketErrorWithBody(proto.OpErr, []byte(err.Error()))
