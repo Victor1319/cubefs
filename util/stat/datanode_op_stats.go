@@ -98,7 +98,7 @@ func NewOpLogger(dir, filename string, maxOps int, duration time.Duration, leftS
 		ticker:         time.NewTicker(duration),
 		done:           make(chan bool),
 		fileSize:       DefaultStatLogSize,
-		recordFile:     true,
+		recordFile:     false,
 		reserveTime:    MaxReservedDays,
 		dir:            dir,
 		filename:       filename,

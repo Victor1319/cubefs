@@ -341,6 +341,7 @@ type Packet struct {
 	HasPrepare         bool
 	VerSeq             uint64 // only used in mod request to datanode
 	VerList            []*VolVersionInfo
+	noPrefix           bool
 }
 
 func IsTinyExtentType(extentType uint8) bool {
@@ -469,6 +470,8 @@ func (p *Packet) GetOpMsg() (m string) {
 		m = "OpMetaReadDir"
 	case OpMetaReadDirLimit:
 		m = "OpMetaReadDirLimit"
+	case OpMetaLockDir:
+		m = "OpMetaLockDir"
 	case OpMetaInodeGet:
 		m = "OpMetaInodeGet"
 	case OpMetaBatchInodeGet:
@@ -1115,7 +1118,7 @@ func (p *Packet) GetUniqueLogId() (m string) {
 		m = m + fmt.Sprintf("_ResultMesg(%v)", p.GetResultMsg())
 	}()
 	if p.HasPrepare {
-		m = p.mesg
+		m = p.GetMsg()
 		return
 	}
 	m = fmt.Sprintf("Req(%v)_Partition(%v)_", p.ReqID, p.PartitionID)
@@ -1148,7 +1151,23 @@ func (p *Packet) GetUniqueLogId() (m string) {
 	return
 }
 
+func (p *Packet) GetMsg() string {
+	if p.noPrefix {
+		p.mesg = fmt.Sprintf("Req(%v)_Partition(%v)_Extent(%v)_ExtentOffset(%v)_KernelOffset(%v)_"+
+			"Size(%v)_Opcode(%v)_CRC(%v), m(%s)",
+			p.ReqID, p.PartitionID, p.ExtentID, p.ExtentOffset,
+			p.KernelOffset, p.Size, p.GetOpMsg(), p.CRC, p.mesg)
+		return p.mesg
+	}
+	return p.mesg
+}
+
 func (p *Packet) setPacketPrefix() {
+	if !log.EnableDebug() && p.IsReadOperation() {
+		p.noPrefix = true
+		return
+	}
+
 	p.mesg = fmt.Sprintf("Req(%v)_Partition(%v)_", p.ReqID, p.PartitionID)
 	if (p.Opcode == OpSplitMarkDelete || (IsTinyExtentType(p.ExtentType) && p.Opcode == OpMarkDelete)) && len(p.Data) > 0 {
 		ext := new(TinyExtentDeleteRecord)

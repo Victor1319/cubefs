@@ -54,6 +54,8 @@ type Streamer struct {
 	pendingCache         chan bcacheKey
 	verSeq               uint64
 	needUpdateVer        int32
+
+	rdonly bool
 }
 
 type bcacheKey struct {
@@ -68,7 +70,7 @@ func NewStreamer(client *ExtentClient, inode uint64) *Streamer {
 	s.inode = inode
 	s.parentInode = 0
 	s.extents = NewExtentCache(inode)
-	s.request = make(chan interface{}, 64)
+	s.request = make(chan interface{}, reqChanSize)
 	s.done = make(chan struct{})
 	s.dirtylist = NewDirtyExtentList()
 	s.isOpen = true
@@ -138,7 +140,9 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 	)
 	log.LogDebugf("action[streamer.read] offset %v size %v", offset, size)
 	ctx := context.Background()
-	s.client.readLimiter.Wait(ctx)
+	if s.client.readLimit() {
+		s.client.readLimiter.Wait(ctx)
+	}
 	s.client.LimitManager.ReadAlloc(ctx, size)
 	requests = s.extents.PrepareReadRequests(offset, size, data)
 	for _, req := range requests {
@@ -192,8 +196,8 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 
 			// skip hole,ek is not nil,read block cache firstly
 			log.LogDebugf("Stream read: ino(%v) req(%v) s.client.bcacheEnable(%v) s.needBCache(%v)", s.inode, req, s.client.bcacheEnable, s.needBCache)
-			cacheKey := util.GenerateRepVolKey(s.client.volumeName, s.inode, req.ExtentKey.PartitionId, req.ExtentKey.ExtentId, req.ExtentKey.FileOffset)
 			if s.client.bcacheEnable && s.needBCache && filesize <= bcache.MaxFileSize {
+				cacheKey := util.GenerateRepVolKey(s.client.volumeName, s.inode, req.ExtentKey.PartitionId, req.ExtentKey.ExtentId, req.ExtentKey.FileOffset)
 				offset := req.FileOffset - int(req.ExtentKey.FileOffset)
 				if s.client.loadBcache != nil {
 					readBytes, err = s.client.loadBcache(cacheKey, req.Data, uint64(offset), uint32(req.Size))
@@ -221,6 +225,7 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 			}
 
 			if s.client.bcacheEnable && s.needBCache && filesize <= bcache.MaxFileSize {
+				cacheKey := util.GenerateRepVolKey(s.client.volumeName, s.inode, req.ExtentKey.PartitionId, req.ExtentKey.ExtentId, req.ExtentKey.FileOffset)
 				// limit big block cache
 				if s.exceedBlockSize(req.ExtentKey.Size) && atomic.LoadInt32(&s.client.inflightL1BigBlock) > 10 {
 					// do nothing
@@ -235,9 +240,7 @@ func (s *Streamer) read(data []byte, offset int, size int) (total int, err error
 				}
 			}
 
-			beg := time.Now()
 			readBytes, err = reader.Read(req)
-			clientMetric.WithLabelValues("Streamer_read_Read").Observe(float64(time.Since(beg).Microseconds()))
 			log.LogDebugf("TRACE Stream read: ino(%v) req(%v) readBytes(%v) err(%v)", s.inode, req, readBytes, err)
 
 			total += readBytes

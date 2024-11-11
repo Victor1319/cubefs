@@ -113,13 +113,14 @@ const (
 	ConfigKeySmuxTotalStream   = "sumxTotalStream"    // int
 
 	// rate limit control enable
-	ConfigDiskQosEnable = "diskQosEnable" // bool
-	ConfigDiskReadIocc  = "diskReadIocc"  // int
-	ConfigDiskReadIops  = "diskReadIops"  // int
-	ConfigDiskReadFlow  = "diskReadFlow"  // int
-	ConfigDiskWriteIocc = "diskWriteIocc" // int
-	ConfigDiskWriteIops = "diskWriteIops" // int
-	ConfigDiskWriteFlow = "diskWriteFlow" // int
+	ConfigDiskQosEnable  = "diskQosEnable"  // bool
+	ConfigDiskReadIocc   = "diskReadIocc"   // int
+	ConfigDiskReadIops   = "diskReadIops"   // int
+	ConfigDiskReadFlow   = "diskReadFlow"   // int
+	ConfigDiskWriteIocc  = "diskWriteIocc"  // int
+	ConfigDiskWriteIops  = "diskWriteIops"  // int
+	ConfigDiskWriteFlow  = "diskWriteFlow"  // int
+	ConfigDiskWQueFactor = "diskWQueFactor" // int
 
 	// load/stop dp limit
 	ConfigDiskCurrentLoadDpLimit = "diskCurrentLoadDpLimit"
@@ -133,6 +134,7 @@ const (
 
 	// disk status becomes unavailable if disk error partition count reaches this value
 	ConfigKeyDiskUnavailablePartitionErrorCount = "diskUnavailablePartitionErrorCount"
+	ConfigKeyCacheCap                           = "cacheCap"
 )
 
 const cpuSampleDuration = 1 * time.Second
@@ -188,6 +190,7 @@ type DataNode struct {
 	diskWriteIocc           int
 	diskWriteIops           int
 	diskWriteFlow           int
+	diskWQueFactor          int
 	dpMaxRepairErrCnt       uint64
 	clusterUuid             string
 	clusterUuidEnable       bool
@@ -203,6 +206,7 @@ type DataNode struct {
 	diskUnavailablePartitionErrorCount uint64 // disk status becomes unavailable when disk error partition count reaches this value
 	started                            int32
 	dpBackupTimeout                    time.Duration
+	cacheCap                           int
 }
 
 type verOp2Phase struct {
@@ -363,9 +367,8 @@ func (s *DataNode) parseConfig(cfg *config.Config) (err error) {
 	}
 	s.port = port
 
-	/*for _, ip := range cfg.GetSlice(proto.MasterAddr) {
-		MasterClient.AddNode(ip.(string))
-	}*/
+	s.cacheCap = cfg.GetInt(ConfigKeyCacheCap)
+	log.LogWarnf("parseConfig: cache cap size %d", s.cacheCap)
 
 	updateInterval := cfg.GetInt(configNameResolveInterval)
 	if updateInterval <= 0 || updateInterval > 60 {

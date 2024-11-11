@@ -52,7 +52,10 @@ type StreamConn struct {
 	maxRetryTimeout time.Duration
 }
 
-var StreamConnPool = util.NewConnectPool()
+var (
+	StreamConnPool      = util.NewConnectPool()
+	StreamWriteConnPool = util.NewConnectPool()
+)
 
 // NewStreamConn returns a new stream connection.
 func NewStreamConn(dp *wrapper.DataPartition, follower bool, timeout time.Duration) (sc *StreamConn) {
@@ -155,7 +158,7 @@ func (sc *StreamConn) sendToDataPartition(req *Packet, retry *bool, getReply Get
 		log.LogDebugf("req opcode %v, conn %v", req.Opcode, conn)
 		err = sc.sendToConn(conn, req, getReply)
 		if err == nil {
-			StreamConnPool.PutConnect(conn, false)
+			StreamConnPool.PutConnectV2(conn, false, sc.currAddr)
 			return
 		}
 		log.LogWarnf("sendToDataPartition: send to curr addr failed, addr(%v) reqPacket(%v) err(%v)", sc.currAddr, req, err)
@@ -180,7 +183,7 @@ func (sc *StreamConn) sendToDataPartition(req *Packet, retry *bool, getReply Get
 		sc.dp.LeaderAddr = addr
 		err = sc.sendToConn(conn, req, getReply)
 		if err == nil {
-			StreamConnPool.PutConnect(conn, false)
+			StreamConnPool.PutConnectV2(conn, false, addr)
 			return
 		}
 		StreamConnPool.PutConnect(conn, true)
@@ -239,6 +242,8 @@ func sortByStatus(dp *wrapper.DataPartition, selectAll bool) (hosts []string) {
 	} else {
 		dpHosts = dp.Hosts
 	}
+
+	hosts = make([]string, 0, len(dpHosts))
 
 	for _, addr := range dpHosts {
 		status, ok := hostsStatus[addr]
