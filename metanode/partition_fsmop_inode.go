@@ -907,7 +907,6 @@ func (mp *metaPartition) fsmSetInodeQuotaBatch(req *proto.BatchSetMetaserverQuot
 			continue
 		}
 		inode = retMsg.Msg
-		log.LogDebugf("fsmSetInodeQuotaBatch msg [%v] inode[%v]", retMsg, inode)
 		quotaInfos := &proto.MetaQuotaInfos{
 			QuotaInfoMap: make(map[uint32]*proto.MetaQuotaInfo),
 		}
@@ -920,8 +919,8 @@ func (mp *metaPartition) fsmSetInodeQuotaBatch(req *proto.BatchSetMetaserverQuot
 			mp.extendTree.ReplaceOrInsert(extend, true)
 		} else {
 			extend = treeItem.(*Extend)
-			value, exist := extend.Get([]byte(proto.QuotaKey))
-			if exist {
+			value := extend.Quota
+			if len(value) > 0 {
 				if err = json.Unmarshal(value, &quotaInfos.QuotaInfoMap); err != nil {
 					log.LogErrorf("set quota Unmarshal quotaInfos fail [%v]", err)
 					resp.InodeRes[ino] = proto.OpErr
@@ -941,8 +940,10 @@ func (mp *metaPartition) fsmSetInodeQuotaBatch(req *proto.BatchSetMetaserverQuot
 			resp.InodeRes[ino] = proto.OpErr
 			continue
 		}
-
-		extend.Put([]byte(proto.QuotaKey), value, mp.verSeq)
+		extend.Quota = value
+		if mp.verSeq > 0 {
+			extend.setVersion(mp.verSeq)
+		}
 		resp.InodeRes[ino] = proto.OpOk
 		if !isExist {
 			files += 1
@@ -950,7 +951,6 @@ func (mp *metaPartition) fsmSetInodeQuotaBatch(req *proto.BatchSetMetaserverQuot
 		}
 	}
 	mp.mqMgr.updateUsedInfo(bytes, files, req.QuotaId)
-	log.LogInfof("fsmSetInodeQuotaBatch quotaId [%v] resp [%v] success.", req.QuotaId, resp)
 	return
 }
 
@@ -983,8 +983,8 @@ func (mp *metaPartition) fsmDeleteInodeQuotaBatch(req *proto.BatchDeleteMetaserv
 			continue
 		} else {
 			extend = treeItem.(*Extend)
-			value, exist := extend.Get([]byte(proto.QuotaKey))
-			if exist {
+			value := extend.Quota
+			if len(value) > 0 {
 				if err = json.Unmarshal(value, &quotaInfos.QuotaInfoMap); err != nil {
 					log.LogErrorf("fsmDeleteInodeQuotaBatch ino[%v] Unmarshal quotaInfos fail [%v]", ino, err)
 					resp.InodeRes[ino] = proto.OpErr
@@ -995,7 +995,7 @@ func (mp *metaPartition) fsmDeleteInodeQuotaBatch(req *proto.BatchDeleteMetaserv
 				if ok {
 					delete(quotaInfos.QuotaInfoMap, req.QuotaId)
 					if len(quotaInfos.QuotaInfoMap) == 0 {
-						extend.Remove([]byte(proto.QuotaKey))
+						extend.Quota = nil
 					} else {
 						value, err = json.Marshal(quotaInfos.QuotaInfoMap)
 						if err != nil {
@@ -1003,7 +1003,10 @@ func (mp *metaPartition) fsmDeleteInodeQuotaBatch(req *proto.BatchDeleteMetaserv
 							resp.InodeRes[ino] = proto.OpErr
 							continue
 						}
-						extend.Put([]byte(proto.QuotaKey), value, mp.verSeq)
+						extend.Quota = value
+						if mp.verSeq > 0 {
+							extend.setVersion(mp.verSeq)
+						}
 					}
 				} else {
 					log.LogDebugf("fsmDeleteInodeQuotaBatch QuotaInfoMap can not find inode[%v] quota [%v]", ino, req.QuotaId)
