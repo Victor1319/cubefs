@@ -433,9 +433,9 @@ func (mp *metaPartition) UnlinkInode(req *UnlinkInoReq, p *Packet, remoteAddr st
 	} else {
 		ino.UpdateHybridCloudParams(item.(*Inode))
 	}
-
+	enableSnapshot := mp.manager != nil && mp.manager.metaNode != nil && mp.manager.metaNode.clusterEnableSnapshot
 	if req.UniqID > 0 {
-		val = InodeOnceUnlinkMarshal(req)
+		val = InodeOnceUnlinkMarshal(req, enableSnapshot)
 		r, err = mp.submit(opFSMUnlinkInodeOnce, val)
 	} else {
 		ino.setVer(req.VerSeq)
